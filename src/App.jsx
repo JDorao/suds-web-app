@@ -1,0 +1,1 @@
+// Aquí irá tu código completo adaptado desde Gemini Canvas
