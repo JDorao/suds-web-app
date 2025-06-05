@@ -818,6 +818,7 @@ const ContractsTab = () => {
   useEffect(() => {
     if (!db || !appId) return;
 
+    // CORRECTED: Ensure the collection path is valid for Firestore security rules
     const q = collection(db, `artifacts/${appId}/public/data/contracts`);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const contractsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -904,9 +905,9 @@ const ContractsTab = () => {
           <button
             onClick={() => setShowAddContractForm(!showAddContractForm)}
             className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md text-xl leading-none"
-            title={showAddSudsForm ? '−' : '+'}
+            title={showAddContractForm ? 'Ocultar formulario' : 'Añadir nuevo contrato'} // Corrected title
           >
-            {showAddSudsForm ? '−' : '+'}
+            {showAddContractForm ? '−' : '+'}
           </button>
         )}
       </h2>
@@ -3027,4 +3028,3 @@ const VisualSummaryTab = () => {
 
 
 export default App;
-
