@@ -378,12 +378,12 @@ const App = () => {
         {/* Navigation Tabs */}
         <nav className="bg-white shadow-md py-3 px-4">
           <div className="container mx-auto flex flex-wrap justify-center md:justify-start gap-2 md:gap-4">
-            <TabButton label="Tipos de SUDS" tabId="sudsTypes" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <TabButton label="Tipos de SUDS y elementos auxiliares" tabId="sudsTypes" activeTab={activeTab} setActiveTab={setActiveTab} />
             <TabButton label="Contratos de mantenimiento" tabId="contracts" activeTab={activeTab} setActiveTab={setActiveTab} />
-            <TabButton label="Definición de Actividades por SUDS" tabId="sudsActivityDefinition" activeTab={activeTab} setActiveTab={setActiveTab} /> {/* New Tab 3 */}
-            <TabButton label="Detalle de Actividades por SUDS" tabId="sudsActivityDetails" activeTab={activeTab} setActiveTab={setActiveTab} /> {/* New Tab 4 */}
-            <TabButton label="Resumen por contrato y validación" tabId="summary" activeTab={activeTab} setActiveTab={setActiveTab} /> {/* Old Tab 4 -> New Tab 5 */}
-            <TabButton label="Resumen Visual" tabId="visualSummary" activeTab={activeTab} setActiveTab={setActiveTab} /> {/* Old Tab 5 -> New Tab 6 */}
+            <TabButton label="Definición de Actividades por SUDS" tabId="sudsActivityDefinition" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <TabButton label="Detalle de Actividades por SUDS" tabId="sudsActivityDetails" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <TabButton label="Resumen por contrato y validación" tabId="summary" activeTab={activeTab} setActiveTab={setActiveTab} />
+            <TabButton label="Resumen Visual" tabId="visualSummary" activeTab={activeTab} setActiveTab={setActiveTab} />
           </div>
         </nav>
 
@@ -415,8 +415,8 @@ const App = () => {
         <main className="flex-grow container mx-auto p-4 md:p-6">
           {activeTab === 'sudsTypes' && <SudsTypesTab />}
           {activeTab === 'contracts' && <ContractsTab />}
-          {activeTab === 'sudsActivityDefinition' && <SudsActivityDefinitionTab />} {/* Render new Tab 3 */}
-          {activeTab === 'sudsActivityDetails' && <SudsActivityDetailsTab />} {/* Render new Tab 4 */}
+          {activeTab === 'sudsActivityDefinition' && <SudsActivityDefinitionTab />}
+          {activeTab === 'sudsActivityDetails' && <SudsActivityDetailsTab />}
           {activeTab === 'summary' && <SummaryTab />}
           {activeTab === 'visualSummary' && <VisualSummaryTab />}
         </main>
@@ -430,7 +430,7 @@ const App = () => {
   );
 };
 
-// --- Tab 1: Tipos de SUDS ---
+// --- Tab 1: Tipos de SUDS y elementos auxiliares ---
 const SudsTypesTab = () => {
   const { db, userId, userRole, appId, showCustomModal } = useAppContext();
   const [sudsTypes, setSudsTypes] = useState([]);
@@ -446,10 +446,10 @@ const SudsTypesTab = () => {
   const canEdit = true;
 
   const locationTypeOptions = [
-    { id: 'acera', name: 'Acera', icon: '🚶‍♀️' },
-    { id: 'zona_verde', name: 'Zona Verde', icon: '🌳' },
-    { id: 'viario', name: 'Viario', icon: '🚗' },
-    { id: 'infraestructura', name: 'Infraestructura', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' }, // Changed icon to pipe
+    { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
+    { id: 'zona_verde', name: 'SUDS en zona verde', icon: '🌳' },
+    { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' }, // Changed icon to pipe
   ];
 
   useEffect(() => {
@@ -598,7 +598,7 @@ const SudsTypesTab = () => {
   return (
     <div className="p-4 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2 flex justify-between items-center">
-        Tipos de SUDS
+        Tipos de SUDS y elementos auxiliares
         {canEdit && (
           <button
             onClick={() => setShowAddSudsForm(!showAddSudsForm)}
@@ -710,7 +710,7 @@ const SudsTypesTab = () => {
       )}
 
       <div className="mb-8 p-4 bg-gray-100 rounded-lg border border-gray-200">
-        <h3 className="text-xl font-semibold text-gray-800 mb-3">Filtrar Tipos de SUDS</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-3">Filtrar Tipos de SUDS y elementos auxiliares</h3>
         <div className="flex flex-wrap gap-2">
           {locationTypeOptions.map(option => (
             <button
@@ -744,7 +744,7 @@ const SudsTypesTab = () => {
 
 
       <div>
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">Tipos de SUDS Existentes</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">Tipos de SUDS y elementos auxiliares existentes</h3>
         {filteredSudsTypes.length === 0 ? (
           <p className="text-gray-600">No hay tipos de SUDS definidos aún o no coinciden con los filtros. {canEdit && '¡Añade uno!'}</p>
         ) : (
@@ -989,7 +989,7 @@ const ContractsTab = () => {
       )}
 
       <div>
-        <h3 className="text-xl font-semibold text-gray-800 mb-4">Contratos Existentes</h3>
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">Contratos existentes</h3>
         {contracts.length === 0 ? (
           <p className="text-gray-600">No hay contratos definidos aún. {canEdit && '¡Añade uno!'}</p>
         ) : (
@@ -1076,10 +1076,10 @@ const SudsActivityDefinitionTab = () => {
   const canEdit = true; // Everyone can edit definitions
 
   const locationTypeOptions = [
-    { id: 'acera', name: 'Acera', icon: '🚶‍♀️' },
-    { id: 'zona_verde', name: 'Zona Verde', icon: '🌳' },
-    { id: 'viario', name: 'Viario', icon: '🚗' },
-    { id: 'infraestructura', name: 'Infraestructura', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
+    { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
+    { id: 'zona_verde', name: 'SUDS en zona verde', icon: '🌳' },
+    { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
   ];
 
   useEffect(() => {
@@ -1920,10 +1920,10 @@ const SudsActivityDetailsTab = () => {
   const SUDS_DEDICATED_CONTRACT_NAME = 'Actividad específica';
 
   const locationTypeOptions = [
-    { id: 'acera', name: 'Acera', icon: '🚶‍♀️' },
-    { id: 'zona_verde', name: 'Zona Verde', 'icon': '🌳' },
-    { id: 'viario', name: 'Viario', icon: '🚗' },
-    { id: 'infraestructura', name: 'Infraestructura', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
+    { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
+    { id: 'zona_verde', name: 'SUDS en zona verde', 'icon': '🌳' },
+    { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
   ];
 
   useEffect(() => {
@@ -2277,10 +2277,10 @@ const SummaryTab = () => {
   const canValidate = true;
 
   const locationTypeOptions = [ // Re-define for this component's scope
-    { id: 'acera', name: 'Acera', icon: '🚶‍♀️' },
-    { id: 'zona_verde', name: 'Zona Verde', icon: '🌳' },
-    { id: 'viario', name: 'Viario', icon: '🚗' },
-    { id: 'infraestructura', name: 'Infraestructura', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' }, // Changed icon to pipe
+    { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
+    { id: 'zona_verde', name: 'SUDS en zona verde', icon: '🌳' },
+    { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' }, // Changed icon to pipe
   ];
 
   useEffect(() => {
@@ -2684,6 +2684,15 @@ const VisualSummaryTab = () => {
   const [contracts, setContracts] = useState([]); // New state for contracts
   const [loading, setLoading] = useState(true);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all'); // New state for category filter
+  const [selectedVisualLocationFilters, setSelectedVisualLocationFilters] = useState([]); // New state for location filter in visual summary table
+
+
+  const locationTypeOptions = [
+    { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
+    { id: 'zona_verde', name: 'SUDS en zona verde', icon: '🌳' },
+    { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
+  ];
 
   useEffect(() => {
     if (!db || !appId) return;
@@ -2740,12 +2749,19 @@ const VisualSummaryTab = () => {
     fetchAllData();
   }, [db, appId, showCustomModal]);
 
-  // Data processing for charts
+  const handleToggleVisualLocationFilter = (typeId) => {
+    setSelectedVisualLocationFilters(prev =>
+      prev.includes(typeId) ? prev.filter(id => id !== typeId) : [...prev, typeId]
+    );
+  };
+
+
+  // Data processing for charts (adapted for 4 new charts)
   const processChartData = () => {
     const proposedStatusCounts = {
       'Incluido en contrato': 0,
       'Fácilmente integrable': 0,
-      'Actividad específica': 0, // Changed text here
+      'Actividad específica': 0,
       'No aplica': 0,
       'N/A': 0,
     };
@@ -2757,45 +2773,63 @@ const VisualSummaryTab = () => {
       'N/A': 0,
     };
 
-    const sudsTypeComparisonData = sudsTypes.map(suds => ({
-      name: suds.name,
-      proposed_verde: 0,
-      proposed_amarillo: 0,
-      proposed_rojo: 0,
-      proposed_no_aplica: 0,
-      validated: 0,
-      rejected: 0,
-      pending: 0,
-    }));
+    // Initialize data for each location type for the new bar charts
+    // Each location type will contain an array of objects, where each object is a SUDS type
+    const locationTypeSpecificChartsData = {};
+    locationTypeOptions.forEach(option => {
+        locationTypeSpecificChartsData[option.id] = [];
+    });
+
 
     maintenanceActivities.forEach(activity => {
-      // Only count activities that are marked as 'applies: true' for visual summary
       if (!activity.applies) return;
 
-      // Proposed Status Counts
+      // Find the SUDS type for this activity
+      const sudsType = sudsTypes.find(s => s.id === activity.sudsTypeId);
+      if (!sudsType) return;
+
+      // Update global proposed and validation counts
       if (activity.status === 'verde') proposedStatusCounts['Incluido en contrato']++;
       else if (activity.status === 'amarillo') proposedStatusCounts['Fácilmente integrable']++;
-      else if (activity.status === 'rojo') proposedStatusCounts['Actividad específica']++; // Changed text here
+      else if (activity.status === 'rojo') proposedStatusCounts['Actividad específica']++;
       else if (activity.status === 'no_aplica') proposedStatusCounts['No aplica']++;
       else proposedStatusCounts['N/A']++;
 
-      // Validation Status Counts
       if (activity.validationStatus === 'validado') validationStatusCounts['validado']++;
       else if (activity.validationStatus === 'rechazado') validationStatusCounts['rechazado']++;
       else if (activity.validationStatus === 'pendiente') validationStatusCounts['pendiente']++;
       else validationStatusCounts['N/A']++;
 
-      // SUDS Type Comparison
-      const sudsTypeIndex = sudsTypeComparisonData.findIndex(d => d.name === sudsTypes.find(s => s.id === activity.sudsTypeId)?.name);
-      if (sudsTypeIndex !== -1) {
-        if (activity.status === 'verde') sudsTypeComparisonData[sudsTypeIndex].proposed_verde++;
-        else if (activity.status === 'amarillo') sudsTypeComparisonData[sudsTypeIndex].proposed_amarillo++;
-        else if (activity.status === 'rojo') sudsTypeComparisonData[sudsTypeIndex].proposed_rojo++;
-        else if (activity.status === 'no_aplica') sudsTypeComparisonData[sudsTypeIndex].proposed_no_aplica++;
+      // Update specific location type charts data
+      if (sudsType.locationTypes && sudsType.locationTypes.length > 0) {
+        sudsType.locationTypes.forEach(locTypeId => {
+          if (locationTypeSpecificChartsData[locTypeId]) {
+            let sudsEntry = locationTypeSpecificChartsData[locTypeId].find(entry => entry.name === sudsType.name);
+            if (!sudsEntry) {
+              sudsEntry = {
+                name: sudsType.name,
+                proposed_verde: 0,
+                proposed_amarillo: 0,
+                proposed_rojo: 0,
+                proposed_no_aplica: 0,
+                validated: 0,
+                rejected: 0,
+                pending: 0,
+              };
+              locationTypeSpecificChartsData[locTypeId].push(sudsEntry);
+            }
 
-        if (activity.validationStatus === 'validado') sudsTypeComparisonData[sudsTypeIndex].validated++;
-        else if (activity.validationStatus === 'rechazado') sudsTypeComparisonData[sudsTypeIndex].rejected++;
-        else if (activity.validationStatus === 'pendiente') sudsTypeComparisonData[sudsTypeIndex].pending++;
+            // Aggregate counts for the current SUDS type within this location type
+            if (activity.status === 'verde') sudsEntry.proposed_verde++;
+            else if (activity.status === 'amarillo') sudsEntry.proposed_amarillo++;
+            else if (activity.status === 'rojo') sudsEntry.proposed_rojo++;
+            else if (activity.status === 'no_aplica') sudsEntry.proposed_no_aplica++;
+
+            if (activity.validationStatus === 'validado') sudsEntry.validated++;
+            else if (activity.validationStatus === 'rechazado') sudsEntry.rejected++;
+            else if (activity.validationStatus === 'pendiente') sudsEntry.pending++;
+          }
+        });
       }
     });
 
@@ -2809,10 +2843,11 @@ const VisualSummaryTab = () => {
       value: validationStatusCounts[key],
     })).filter(item => item.value > 0);
 
-    return { proposedPieData, validationPieData, sudsTypeComparisonData };
+
+    return { proposedPieData, validationPieData, locationTypeSpecificChartsData };
   };
 
-  const { proposedPieData, validationPieData, sudsTypeComparisonData } = processChartData();
+  const { proposedPieData, validationPieData, locationTypeSpecificChartsData } = processChartData();
 
   const COLORS_PROPOSED = ['#4CAF50', '#FFC107', '#F44336', '#9E9E9E', '#BDBDBD']; // Green, Yellow, Red, Grey, Light Grey
   const COLORS_VALIDATION = ['#FFC107', '#4CAF50', '#F44336', '#BDBDBD']; // Yellow, Green, Red, Light Grey
@@ -2836,6 +2871,13 @@ const VisualSummaryTab = () => {
   if (loading) {
     return <div className="text-center text-gray-600">Cargando resumen visual...</div>;
   }
+
+  // Filter SUDS types for the table based on selectedVisualLocationFilters
+  const filteredSudsTypesForTable = sudsTypes.filter(suds => {
+    if (selectedVisualLocationFilters.length === 0) return true;
+    return selectedVisualLocationFilters.some(filterType => suds.locationTypes?.includes(filterType));
+  });
+
 
   return (
     <div className="p-4 bg-white rounded-lg shadow-md">
@@ -2895,9 +2937,43 @@ const VisualSummaryTab = () => {
             </ResponsiveContainer>
           </div>
 
+          {/* Individual Location Type Bar Charts */}
+          {locationTypeOptions.map((locationType) => {
+              const chartData = locationTypeSpecificChartsData[locationType.id];
+              if (!chartData || chartData.length === 0) return null; // Don't render if no data for this location type
+
+              return (
+                <div key={locationType.id} className="lg:col-span-1 bg-gray-50 p-4 rounded-lg shadow-sm">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">
+                    Estado de validación de los {locationType.name}
+                  </h3>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="proposed_verde" stackId="proposed" fill="#4CAF50" name="Propuesto: Incluido" />
+                      <Bar dataKey="proposed_amarillo" stackId="proposed" fill="#FFC107" name="Propuesto: Fácilmente integrable" />
+                      <Bar dataKey="proposed_rojo" stackId="proposed" fill="#F44336" name="Propuesto: Actividad específica" />
+                      <Bar dataKey="proposed_no_aplica" stackId="proposed" fill="#9E9E9E" name="Propuesto: No aplica" />
+                      <Bar dataKey="validated" stackId="validation" fill="#2196F3" name="Validado" />
+                      <Bar dataKey="rejected" stackId="validation" fill="#FF5722" name="Rechazado" />
+                      <Bar dataKey="pending" stackId="validation" fill="#FFEB3B" name="Pendiente" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })}
+
+
           {/* New Table: SUDS vs. Activities with Contract Status and Logo */}
           <div className="lg:col-span-2 bg-gray-50 p-4 rounded-lg shadow-sm overflow-x-auto">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Estado de Contrato por SUDS y Actividad</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Estado de contrato por tipo de SUDS o elemento auxiliar y actividad</h3>
 
             {/* Category Filter for the table */}
             <div className="mb-4 flex items-center justify-center">
@@ -2915,6 +2991,41 @@ const VisualSummaryTab = () => {
               </select>
             </div>
 
+            {/* Location Type Filter for the table */}
+            <div className="mb-8 p-4 bg-gray-100 rounded-lg border border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-800 mb-3">Filtrar Tipos de SUDS y elementos auxiliares (Tabla):</h3>
+              <div className="flex flex-wrap gap-2">
+                {locationTypeOptions.map(option => (
+                  <button
+                    key={`filter-table-${option.id}`}
+                    onClick={() => handleToggleVisualLocationFilter(option.id)}
+                    className={`flex items-center justify-center p-2 rounded-md border transition-all duration-200
+                      ${selectedVisualLocationFilters.includes(option.id)
+                        ? 'bg-green-500 text-white border-green-600 shadow-md'
+                        : 'bg-gray-200 text-gray-700 border-gray-300 hover:bg-green-100'
+                      }`}
+                    title={`Filtrar por: ${option.name}`}
+                  >
+                    {option.icon.startsWith('http') ? (
+                      <img src={option.icon} alt={option.name} className="h-6 w-6 object-contain" onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/24x24/cccccc/ffffff?text=?`; }} />
+                    ) : (
+                      <span className="text-xl">{option.icon}</span>
+                    )}
+                    <span className="ml-2 text-sm">{option.name}</span>
+                  </button>
+                ))}
+                {selectedVisualLocationFilters.length > 0 && (
+                  <button
+                    onClick={() => setSelectedVisualLocationFilters([])}
+                    className="p-2 rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors text-sm shadow-md"
+                  >
+                    Limpiar Filtros
+                  </button>
+                )}
+              </div>
+            </div>
+
+
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-100">
                 <tr>
@@ -2927,10 +3038,25 @@ const VisualSummaryTab = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {sudsTypes.map(suds => (
+                {filteredSudsTypesForTable.map(suds => ( // Use filteredSudsTypesForTable here
                   <tr key={suds.id}>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10">
                       {suds.name}
+                      {suds.locationTypes && suds.locationTypes.length > 0 && (
+                        <div className="ml-2 flex gap-1">
+                          {locationTypeOptions.map(option =>
+                            suds.locationTypes.includes(option.id) && (
+                              <span key={option.id} className="text-base" title={option.name}>
+                                {option.icon.startsWith('http') ? (
+                                  <img src={option.icon} alt={option.name} className="h-4 w-4 object-contain" onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/16x16/cccccc/ffffff?text=?`; }} />
+                                ) : (
+                                  <span className="mr-1">{option.icon}</span>
+                                )}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      )}
                     </td>
                     {filteredActivityNames.map(activityName => {
                       // Find the activity for this SUDS and activityName (across all categories)
@@ -2965,7 +3091,7 @@ const VisualSummaryTab = () => {
 
                       return (
                         <td key={`${suds.id}-${activityName}`} className={`p-2 border border-gray-200 text-center ${cellBgClass}`}>
-                          {activity && activity.status && activity.status !== 'no_aplica' && contractLogos.length > 0 && (
+                          {activity && activity.status && activity.status !== 'no_aplica' && contractLogos.length > 0 ? (
                             <div
                               className="flex flex-wrap items-center justify-center gap-1"
                               title={
@@ -2983,9 +3109,11 @@ const VisualSummaryTab = () => {
                                 />
                               ))}
                             </div>
-                          )}
-                          {activity && activity.status === 'no_aplica' && (
+                          ) : activity && activity.status === 'no_aplica' ? (
                             <span className="text-xs text-gray-500">N/A</span>
+                          ) : (
+                            // Render nothing or a placeholder if no activity or if applies: false
+                            <span className="text-xs text-gray-400">-</span>
                           )}
                         </td>
                       );
@@ -2994,31 +3122,6 @@ const VisualSummaryTab = () => {
                 ))}
               </tbody>
             </table>
-          </div>
-
-
-          {/* SUDS Type Comparison Bar Chart */}
-          <div className="lg:col-span-2 bg-gray-50 p-4 rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Comparación por Tipo de SUDS</h3>
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart
-                data={sudsTypeComparisonData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="proposed_verde" stackId="proposed" fill="#4CAF50" name="Propuesto: Incluido" />
-                <Bar dataKey="proposed_amarillo" stackId="proposed" fill="#FFC107" name="Propuesto: Fácilmente integrable" />
-                <Bar dataKey="proposed_rojo" stackId="proposed" fill="#F44336" name="Propuesto: Actividad específica" /> {/* Changed text here */}
-                <Bar dataKey="proposed_no_aplica" stackId="proposed" fill="#9E9E9E" name="Propuesto: No aplica" />
-                <Bar dataKey="validated" stackId="validation" fill="#2196F3" name="Validado" />
-                <Bar dataKey="rejected" stackId="validation" fill="#FF5722" name="Rechazado" />
-                <Bar dataKey="pending" stackId="validation" fill="#FFEB3B" name="Pendiente" />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </div>
       )}
