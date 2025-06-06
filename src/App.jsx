@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth'; // Re-added signInWithCustomToken for Canvas compatibility
-import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from 'firebase/firestore'; // Import writeBatch
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 
@@ -12,32 +12,38 @@ const AppContext = createContext(null);
 const useAppContext = () => useContext(AppContext);
 
 // --- Firebase Configuration and Initialization ---
-// Usar la configuración de Firebase desde las variables de entorno de Vite
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_APP_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_APP_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_APP_FIREBASE_APP_ID // ¡Este es el appId que usas en tus reglas de seguridad!
-};
+let firebaseConfig = {};
+let currentAppId = '';
 
-// Initialize Firebase App
+// Check if running in Canvas environment (where __firebase_config is defined)
+if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined') {
+  firebaseConfig = JSON.parse(__firebase_config);
+  currentAppId = __app_id;
+} else {
+  // Assume standard web environment (e.g., Vite dev/build)
+  // These environment variables need to be set in a .env file (e.g., .env.local)
+  firebaseConfig = {
+    apiKey: import.meta.env.VITE_APP_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_APP_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_APP_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_APP_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_APP_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_APP_FIREBASE_APP_ID
+  };
+  currentAppId = firebaseConfig.appId;
+}
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const appId = currentAppId; // Use the determined appId
 
-// Para el despliegue web, el appId será el que definimos en firebaseConfig
-// No necesitamos la variable global __app_id de Canvas aquí
-const appId = firebaseConfig.appId; // Ahora toma el valor de la variable de entorno
-
-// --- Role Definitions (kept for reference, but functionality is now open) ---
+// --- Role Definitions ---
 const ROLES = {
-  MAIN_EDITOR: 'editor_principal',
-  EDITOR: 'editor',
-  READER: 'lector',
-  PROPOSAL: 'propuesta',
-  VALIDATOR: 'validador',
+  MASTER: 'Master',
+  SUDS_SPECIALIST: 'Especialista en SUDS',
+  CONTRACT_MANAGER: 'Responsable de contrato',
+  READER: 'Lector',
 };
 
 // --- Helper function for custom modal (instead of alert/confirm) ---
@@ -69,6 +75,76 @@ const CustomModal = ({ message, onConfirm, onCancel, showCancel = false }) => {
   );
 };
 
+// --- Login Modal Component ---
+const LoginModal = ({ isOpen, onClose, onLogin }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await onLogin(email, password);
+      onClose();
+    } catch (err) {
+      setError('Error de inicio de sesión. Comprueba tus credenciales.');
+      console.error("Login error:", err);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+        <h3 className="text-xl font-semibold text-gray-800 mb-4 text-center">Identificarse</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label htmlFor="loginEmail" className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+            <input
+              type="email"
+              id="loginEmail"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+          <div className="mb-6">
+            <label htmlFor="loginPassword" className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+            <input
+              type="password"
+              id="loginPassword"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+          {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+          <div className="flex justify-end space-x-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Entrar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
 // --- Tab Button Component ---
 const TabButton = ({ label, tabId, activeTab, setActiveTab }) => (
   <button
@@ -90,16 +166,40 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('sudsTypes');
   const [currentUser, setCurrentUser] = useState(null);
   const [userId, setUserId] = useState('');
-  const [userRole, setUserRole] = useState(ROLES.MAIN_EDITOR); // Everyone is now a Main Editor
+  const [userEmail, setUserEmail] = useState(''); // New state for user email
+  const [userRole, setUserRole] = useState(ROLES.READER); // Default to Lector
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalConfirmAction, setModalConfirmAction] = useState(null);
   const [showModalCancel, setShowModalCancel] = useState(false);
   const fileInputRef = useRef(null); // Ref for the file input
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // New state to track if logged in (not anonymous)
 
-  // Role assignment is now simplified: everyone is a main editor
-  const assignRole = (uid) => {
-    return ROLES.MAIN_EDITOR;
+  // Function to get user role from Firestore
+  const fetchUserRole = async (uid, email) => {
+    if (!db || !uid) return ROLES.READER; // Default to reader if no UID
+    try {
+      const userDocRef = doc(db, `artifacts/${appId}/public/data/userProfiles`, uid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        return userData.role || ROLES.READER;
+      } else {
+        // If user document doesn't exist, create it as a Reader by default
+        await setDoc(userDocRef, {
+          uid: uid,
+          email: email,
+          name: email.split('@')[0], // Basic name from email
+          role: ROLES.READER,
+          lastSentTimestamp: new Date(), // Initialize timestamp
+        }, { merge: true });
+        return ROLES.READER;
+      }
+    } catch (error) {
+      console.error("Error fetching/setting user role:", error);
+      return ROLES.READER; // Fallback to reader on error
+    }
   };
 
   useEffect(() => {
@@ -108,30 +208,73 @@ const App = () => {
       if (user) {
         setCurrentUser(user);
         setUserId(user.uid);
-        setUserRole(assignRole(user.uid)); // This will now always be MAIN_EDITOR
-        console.log("Authenticated user:", user.uid, "Role:", assignRole(user.uid));
+        setUserEmail(user.email);
+        const fetchedRole = await fetchUserRole(user.uid, user.email);
+        setUserRole(fetchedRole);
+        setIsLoggedIn(!user.isAnonymous); // Set isLoggedIn based on anonymous status
+        console.log("Authenticated user:", user.uid, "Role:", fetchedRole, "Is Anonymous:", user.isAnonymous);
       } else {
-        // Sign in anonymously if no user, or with custom token if in Canvas environment
+        // If no user (e.g., after logout), sign in anonymously for default reader access
         try {
           if (typeof __initial_auth_token !== 'undefined') {
+            // For Canvas environment, try custom token first
             await signInWithCustomToken(auth, __initial_auth_token);
+            const canvasUser = auth.currentUser;
+            setCurrentUser(canvasUser);
+            setUserId(canvasUser?.uid || crypto.randomUUID());
+            setUserEmail(canvasUser?.email || 'anonymous@canvas.com');
+            const fetchedRole = await fetchUserRole(canvasUser?.uid, canvasUser?.email || 'anonymous@canvas.com');
+            setUserRole(fetchedRole);
+            setIsLoggedIn(!canvasUser.isAnonymous); // This will be false for anonymous token
             console.log("Signed in with custom token (Canvas environment).");
           } else {
+            // For general web environment, sign in anonymously
             await signInAnonymously(auth);
+            const anonUser = auth.currentUser;
+            setCurrentUser(anonUser);
+            setUserId(anonUser?.uid || crypto.randomUUID());
+            setUserEmail(anonUser?.email || 'anonymous@app.com');
+            const fetchedRole = await fetchUserRole(anonUser?.uid, anonUser?.email || 'anonymous@app.com');
+            setUserRole(fetchedRole);
+            setIsLoggedIn(!anonUser.isAnonymous); // This will be false for anonymous user
             console.log("Signed in anonymously (web environment).");
           }
-          setUserId(auth.currentUser?.uid || crypto.randomUUID()); // Ensure userId is set after auth
         } catch (error) {
           console.error("Error during Firebase sign-in:", error);
           setModalMessage(`Error al iniciar sesión: ${error.message}`);
           setUserId(crypto.randomUUID()); // Fallback to a random ID if authentication fails
+          setUserEmail('error@app.com');
+          setUserRole(ROLES.READER); // Ensure role is reader on auth error
+          setIsLoggedIn(false); // Ensure false on auth error
         }
       }
       setIsAuthReady(true);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  const handleLogin = async (email, password) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle setting currentUser, userId, userEmail, userRole, and isLoggedIn
+    } catch (error) {
+      console.error("Error logging in:", error);
+      throw error; // Re-throw to allow LoginModal to show error
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // onAuthStateChanged will handle setting user back to anonymous/reader
+      showCustomModal("Sesión cerrada con éxito.", () => {});
+    } catch (error) {
+      console.error("Error logging out:", error);
+      showCustomModal(`Error al cerrar sesión: ${error.message}`, () => {});
+    }
+  };
 
   const showCustomModal = (message, onConfirm, showCancel = false, onCancel = null) => {
     setModalMessage(message);
@@ -160,7 +303,7 @@ const App = () => {
   const handleExportData = async () => {
     showCustomModal("Preparando datos para descargar...", () => {});
     try {
-      const collectionsToExport = ['sudsTypes', 'contracts', 'maintenanceActivities'];
+      const collectionsToExport = ['sudsTypes', 'contracts', 'maintenanceActivities', 'userProfiles']; // Include userProfiles
       const appSettingsDocs = ['maintenanceCategories', 'definedActivityNames'];
       const exportedData = {};
 
@@ -213,7 +356,7 @@ const App = () => {
             try {
               const importedData = JSON.parse(e.target.result);
 
-              const collectionsToImport = ['sudsTypes', 'contracts', 'maintenanceActivities'];
+              const collectionsToImport = ['sudsTypes', 'contracts', 'maintenanceActivities', 'userProfiles'];
               const appSettingsDocs = ['maintenanceCategories', 'definedActivityNames'];
 
               // Clear existing data in collections
@@ -263,14 +406,15 @@ const App = () => {
           showCustomModal(`Error al cargar datos: ${error.message}`);
         }
       },
-      true // Show cancel button for confirmation
+      true
     );
-    // Clear the file input value to allow re-importing the same file
     event.target.value = '';
   };
 
   // --- Reordering Functions (Centralized) ---
   const handleMoveSudsType = async (sudsId, direction, currentSudsTypes) => {
+    if (userRole === ROLES.READER) return; // Only allow editing roles
+
     const currentIndex = currentSudsTypes.findIndex(s => s.id === sudsId);
     if (currentIndex === -1) return;
 
@@ -286,7 +430,6 @@ const App = () => {
 
     const batch = writeBatch(db);
     newSudsTypesOrder.forEach((suds, index) => {
-      // Only update if order has changed or if it's a new SUDS without an order
       if (suds.order !== index || suds.order === undefined) {
         batch.update(doc(db, `artifacts/${appId}/public/data/sudsTypes`, suds.id), { order: index });
       }
@@ -294,7 +437,6 @@ const App = () => {
 
     try {
       await batch.commit();
-      // showCustomModal("Orden de tipos de SUDS actualizado."); // Too many popups
     } catch (error) {
       console.error("Error moving SUDS type:", error);
       showCustomModal(`Error al mover el tipo de SUDS: ${error.message}`);
@@ -302,6 +444,8 @@ const App = () => {
   };
 
   const handleMoveActivityColumn = async (category, activityName, direction, currentDefinedActivityNames) => {
+    if (userRole === ROLES.READER) return; // Only allow editing roles
+
     const currentCategoryActivities = currentDefinedActivityNames[category] || [];
     const currentIndex = currentCategoryActivities.indexOf(activityName);
     const newActivities = [...currentCategoryActivities];
@@ -321,10 +465,24 @@ const App = () => {
 
     try {
       await setDoc(doc(db, `artifacts/${appId}/public/data/appSettings`, 'definedActivityNames'), updatedDefinedActivities);
-      // showCustomModal(`Actividad "${activityName}" movida.`); // Too many popups
     } catch (error) {
       console.error("Error moving activity column:", error);
       showCustomModal(`Error al mover la actividad: ${error.message}`);
+    }
+  };
+
+  const handleSendUpdates = async () => {
+    if (!currentUser || userRole === ROLES.READER || userRole === ROLES.MASTER) return; // Only for Specialist and Contract Manager
+
+    try {
+      const userDocRef = doc(db, `artifacts/${appId}/public/data/userProfiles`, userId);
+      await updateDoc(userDocRef, {
+        lastSentTimestamp: new Date(),
+      });
+      showCustomModal("¡Actualizaciones enviadas con éxito!", () => {});
+    } catch (error) {
+      console.error("Error sending updates:", error);
+      showCustomModal(`Error al enviar actualizaciones: ${error.message}`, () => {});
     }
   };
 
@@ -338,13 +496,18 @@ const App = () => {
   }
 
   return (
-    <AppContext.Provider value={{ db, auth, userId, userRole, appId, showCustomModal, handleMoveSudsType, handleMoveActivityColumn }}>
+    <AppContext.Provider value={{ db, auth, userId, userEmail, userRole, appId, showCustomModal, handleMoveSudsType, handleMoveActivityColumn, ROLES }}>
       <div className="min-h-screen bg-gray-100 font-inter flex flex-col">
         <CustomModal
           message={modalMessage}
           onConfirm={handleModalConfirm}
           onCancel={handleModalCancel}
           showCancel={showModalCancel}
+        />
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onLogin={handleLogin}
         />
 
         {/* Header */}
@@ -368,9 +531,34 @@ const App = () => {
               />
             </div>
             <div className="flex flex-col items-center md:items-end text-sm md:text-base">
-              <span className="text-xs italic text-gray-200">Área Demostradora de Acción Climática de Madrid Nuevo Norte.</span>
-              <span className="text-xs italic text-gray-200">GT de Gestión innovadora del Agua.</span>
-              <span className="mt-2">Usuario: <span className="font-semibold">{userId}</span> | Rol: <span className="font-semibold">{userRole}</span></span>
+              <span>Usuario: <span className="font-semibold">{userEmail}</span> | Rol: <span className="font-semibold">{userRole}</span></span>
+              <div className="mt-2 flex space-x-2">
+                {isLoggedIn ? ( // Use isLoggedIn state here
+                  <>
+                    {userRole === ROLES.SUDS_SPECIALIST || userRole === ROLES.CONTRACT_MANAGER ? (
+                      <button
+                        onClick={handleSendUpdates}
+                        className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors shadow-md text-sm"
+                      >
+                        Enviar Cambios
+                      </button>
+                    ) : null}
+                    <button
+                      onClick={handleLogout}
+                      className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors shadow-md text-sm"
+                    >
+                      Cerrar Sesión
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setShowLoginModal(true)}
+                    className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors shadow-md text-sm"
+                  >
+                    Identificarse
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -384,31 +572,36 @@ const App = () => {
             <TabButton label="Detalle de Actividades por SUDS" tabId="sudsActivityDetails" activeTab={activeTab} setActiveTab={setActiveTab} />
             <TabButton label="Resumen por contrato y validación" tabId="summary" activeTab={activeTab} setActiveTab={setActiveTab} />
             <TabButton label="Resumen Visual" tabId="visualSummary" activeTab={activeTab} setActiveTab={setActiveTab} />
+            {userRole === ROLES.MASTER && (
+              <TabButton label="Gestión de usuarios" tabId="userManagement" activeTab={activeTab} setActiveTab={setActiveTab} />
+            )}
           </div>
         </nav>
 
-        {/* Import/Export Buttons */}
-        <div className="bg-gray-200 p-3 flex flex-wrap justify-center gap-4 shadow-inner">
-          <button
-            onClick={handleExportData}
-            className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-md text-sm"
-          >
-            Descargar Datos
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={processImportFile}
-            accept=".json"
-            className="hidden"
-          />
-          <button
-            onClick={handleImportData}
-            className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-md text-sm"
-          >
-            Subir Datos
-          </button>
-        </div>
+        {/* Import/Export Buttons (Only visible to Master for full control) */}
+        {userRole === ROLES.MASTER && (
+          <div className="bg-gray-200 p-3 flex flex-wrap justify-center gap-4 shadow-inner">
+            <button
+              onClick={handleExportData}
+              className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-md text-sm"
+            >
+              Descargar Datos
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={processImportFile}
+              accept=".json"
+              className="hidden"
+            />
+            <button
+              onClick={handleImportData}
+              className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-md text-sm"
+            >
+              Subir Datos
+            </button>
+          </div>
+        )}
 
 
         {/* Main Content Area */}
@@ -419,6 +612,7 @@ const App = () => {
           {activeTab === 'sudsActivityDetails' && <SudsActivityDetailsTab />}
           {activeTab === 'summary' && <SummaryTab />}
           {activeTab === 'visualSummary' && <VisualSummaryTab />}
+          {activeTab === 'userManagement' && userRole === ROLES.MASTER && <UserManagementTab />}
         </main>
 
         {/* Footer */}
@@ -432,24 +626,25 @@ const App = () => {
 
 // --- Tab 1: Tipos de SUDS y elementos auxiliares ---
 const SudsTypesTab = () => {
-  const { db, userId, userRole, appId, showCustomModal } = useAppContext();
+  const { db, userId, userRole, appId, showCustomModal, ROLES } = useAppContext();
   const [sudsTypes, setSudsTypes] = useState([]);
   const [newSudsName, setNewSudsName] = useState('');
   const [newSudsDescription, setNewSudsDescription] = useState('');
   const [newSudsImageUrl, setNewSudsImageUrl] = useState('');
-  const [newSudsLocationTypes, setNewSudsLocationTypes] = useState([]); // New state for location types
+  const [newSudsLocationTypes, setNewSudsLocationTypes] = useState([]);
   const [editingSudsId, setEditingSudsId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddSudsForm, setShowAddSudsForm] = useState(false);
-  const [filterLocationTypes, setFilterLocationTypes] = useState([]); // State for filtering
-  const [generatingDescription, setGeneratingDescription] = useState(false); // State for LLM loading
-  const canEdit = true;
+  const [filterLocationTypes, setFilterLocationTypes] = useState([]);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+
+  const canEdit = userRole === ROLES.MASTER || userRole === ROLES.SUDS_SPECIALIST;
 
   const locationTypeOptions = [
     { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
     { id: 'zona_verde', name: 'SUDS en zona verde', icon: '🌳' },
     { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
-    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' }, // Changed icon to pipe
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
   ];
 
   useEffect(() => {
@@ -470,6 +665,7 @@ const SudsTypesTab = () => {
   }, [db, appId, showCustomModal]);
 
   const handleToggleLocationType = (typeId) => {
+    if (!canEdit) return;
     setNewSudsLocationTypes(prev =>
       prev.includes(typeId) ? prev.filter(id => id !== typeId) : [...prev, typeId]
     );
@@ -482,12 +678,13 @@ const SudsTypesTab = () => {
   };
 
   const handleGenerateSudsDescription = async () => {
+    if (!canEdit) return;
     if (!newSudsName.trim()) {
       showCustomModal("Por favor, introduce el nombre del SUDS para generar una descripción.");
       return;
     }
 
-    setGeneratingDescription(true); // Set loading for the button
+    setGeneratingDescription(true);
     try {
       const locationNames = newSudsLocationTypes.map(id => locationTypeOptions.find(opt => opt.id === id)?.name).filter(Boolean);
       const locationPrompt = locationNames.length > 0 ? `Si los tipos de ubicación son: ${locationNames.join(', ')}.` : '';
@@ -497,7 +694,7 @@ const SudsTypesTab = () => {
       let chatHistory = [];
       chatHistory.push({ role: "user", parts: [{ text: prompt }] });
       const payload = { contents: chatHistory };
-      const apiKey = ""; // Leave as-is, Canvas will provide at runtime
+      const apiKey = "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(apiUrl, {
@@ -519,11 +716,12 @@ const SudsTypesTab = () => {
       console.error("Error calling Gemini API:", error);
       showCustomModal(`Error al generar descripción: ${error.message}`);
     } finally {
-      setGeneratingDescription(false); // End loading
+      setGeneratingDescription(false);
     }
   };
 
   const handleAddOrUpdateSuds = async () => {
+    if (!canEdit) return;
     if (!newSudsName.trim() || !newSudsDescription.trim()) {
       showCustomModal("Por favor, rellena el nombre y la descripción del SUDS.");
       return;
@@ -534,7 +732,7 @@ const SudsTypesTab = () => {
         name: newSudsName.trim(),
         description: newSudsDescription.trim(),
         imageUrls: newSudsImageUrl.trim() ? [newSudsImageUrl.trim()] : [],
-        locationTypes: newSudsLocationTypes, // Save location types
+        locationTypes: newSudsLocationTypes,
         lastUpdatedBy: userId,
         timestamp: new Date(),
       };
@@ -549,7 +747,7 @@ const SudsTypesTab = () => {
       setNewSudsName('');
       setNewSudsDescription('');
       setNewSudsImageUrl('');
-      setNewSudsLocationTypes([]); // Clear location types
+      setNewSudsLocationTypes([]);
       setEditingSudsId(null);
       setShowAddSudsForm(false);
     } catch (error) {
@@ -559,15 +757,17 @@ const SudsTypesTab = () => {
   };
 
   const handleEditSuds = (suds) => {
+    if (!canEdit) return;
     setNewSudsName(suds.name);
     setNewSudsDescription(suds.description);
     setNewSudsImageUrl(suds.imageUrls && suds.imageUrls.length > 0 ? suds.imageUrls[0] : '');
-    setNewSudsLocationTypes(suds.locationTypes || []); // Load location types
+    setNewSudsLocationTypes(suds.locationTypes || []);
     setEditingSudsId(suds.id);
     setShowAddSudsForm(true);
   };
 
   const handleDeleteSuds = async (id) => {
+    if (!canEdit) return;
     showCustomModal(
       "¿Estás seguro de que quieres eliminar este tipo de SUDS?",
       async () => {
@@ -584,7 +784,7 @@ const SudsTypesTab = () => {
   };
 
   const filteredSudsTypes = sudsTypes.filter(suds => {
-    if (filterLocationTypes.length === 0) return true; // No filters applied
+    if (filterLocationTypes.length === 0) return true;
     return filterLocationTypes.some(filterType => suds.locationTypes?.includes(filterType));
   });
 
@@ -623,6 +823,7 @@ const SudsTypesTab = () => {
                 onChange={(e) => setNewSudsName(e.target.value)}
                 placeholder="Ej: Zanja de infiltración"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                disabled={!canEdit}
               />
             </div>
             <div>
@@ -635,10 +836,11 @@ const SudsTypesTab = () => {
                   placeholder="Descripción detallada del tipo de SUDS..."
                   rows="3"
                   className="flex-grow p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!canEdit}
                 ></textarea>
                 <button
                   onClick={handleGenerateSudsDescription}
-                  disabled={generatingDescription}
+                  disabled={generatingDescription || !canEdit}
                   className="p-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Generar descripción con IA"
                 >
@@ -655,6 +857,7 @@ const SudsTypesTab = () => {
                 onChange={(e) => setNewSudsImageUrl(e.target.value)}
                 placeholder="https://placehold.co/300x200/cccccc/ffffff?text=SUDS"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                disabled={!canEdit}
               />
               <p className="text-xs text-gray-500 mt-1">Introduce una URL de imagen. Solo se admite una imagen por ahora.</p>
             </div>
@@ -671,6 +874,7 @@ const SudsTypesTab = () => {
                         : 'bg-gray-200 text-gray-700 border-gray-300 hover:bg-blue-100'
                       }`}
                     title={option.name}
+                    disabled={!canEdit}
                   >
                     {option.icon.startsWith('http') ? (
                       <img src={option.icon} alt={option.name} className="h-6 w-6 object-contain" onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/24x24/cccccc/ffffff?text=?`; }} />
@@ -686,7 +890,8 @@ const SudsTypesTab = () => {
           <div className="flex justify-end space-x-2">
             <button
               onClick={handleAddOrUpdateSuds}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canEdit}
             >
               {editingSudsId ? 'Guardar Cambios' : 'Añadir SUDS'}
             </button>
@@ -696,11 +901,12 @@ const SudsTypesTab = () => {
                   setNewSudsName('');
                   setNewSudsDescription('');
                   setNewSudsImageUrl('');
-                  setNewSudsLocationTypes([]); // Clear location types
+                  setNewSudsLocationTypes([]);
                   setEditingSudsId(null);
                   setShowAddSudsForm(false);
                 }}
                 className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors shadow-md"
+                disabled={!canEdit}
               >
                 Cancelar Edición
               </button>
@@ -804,7 +1010,7 @@ const SudsTypesTab = () => {
 
 // --- Tab 2: Contratos de mantenimiento ---
 const ContractsTab = () => {
-  const { db, userId, userRole, appId, showCustomModal } = useAppContext();
+  const { db, userId, userRole, appId, showCustomModal, ROLES } = useAppContext();
   const [contracts, setContracts] = useState([]);
   const [newContractName, setNewContractName] = useState('');
   const [newContractSummary, setNewContractSummary] = useState('');
@@ -813,12 +1019,12 @@ const ContractsTab = () => {
   const [editingContractId, setEditingContractId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddContractForm, setShowAddContractForm] = useState(false);
-  const canEdit = true;
+
+  const canEdit = userRole === ROLES.MASTER || userRole === ROLES.CONTRACT_MANAGER;
 
   useEffect(() => {
     if (!db || !appId) return;
 
-    // CORRECTED: Ensure the collection path is valid for Firestore security rules
     const q = collection(db, `artifacts/${appId}/public/data/contracts`);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const contractsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -834,6 +1040,7 @@ const ContractsTab = () => {
   }, [db, appId, showCustomModal]);
 
   const handleAddOrUpdateContract = async () => {
+    if (!canEdit) return;
     if (!newContractName.trim() || !newContractSummary.trim() || !newContractResponsible.trim()) {
       showCustomModal("Por favor, rellena todos los campos del contrato.");
       return;
@@ -869,6 +1076,7 @@ const ContractsTab = () => {
   };
 
   const handleEditContract = (contract) => {
+    if (!canEdit) return;
     setNewContractName(contract.name);
     setNewContractSummary(contract.summary);
     setNewContractResponsible(contract.responsible);
@@ -878,6 +1086,7 @@ const ContractsTab = () => {
   };
 
   const handleDeleteContract = async (id) => {
+    if (!canEdit) return;
     showCustomModal(
       "¿Estás seguro de que quieres eliminar este contrato? Esto también afectará a las actividades asociadas.",
       async () => {
@@ -905,7 +1114,7 @@ const ContractsTab = () => {
           <button
             onClick={() => setShowAddContractForm(!showAddContractForm)}
             className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md text-xl leading-none"
-            title={showAddContractForm ? 'Ocultar formulario' : 'Añadir nuevo contrato'} // Corrected title
+            title={showAddContractForm ? 'Ocultar formulario' : 'Añadir nuevo contrato'}
           >
             {showAddContractForm ? '−' : '+'}
           </button>
@@ -925,6 +1134,7 @@ const ContractsTab = () => {
                 onChange={(e) => setNewContractName(e.target.value)}
                 placeholder="Ej: Conservación del viario"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                disabled={!canEdit}
               />
             </div>
             <div>
@@ -936,6 +1146,7 @@ const ContractsTab = () => {
                 onChange={(e) => setNewContractResponsible(e.target.value)}
                 placeholder="Nombre del responsable o ID de usuario"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                disabled={!canEdit}
               />
             </div>
             <div className="md:col-span-2">
@@ -947,6 +1158,7 @@ const ContractsTab = () => {
                 placeholder="Resumen del contrato, alcance, etc."
                 rows="3"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                disabled={!canEdit}
               ></textarea>
             </div>
             <div className="md:col-span-2">
@@ -958,6 +1170,7 @@ const ContractsTab = () => {
                 onChange={(e) => setNewContractLogoUrl(e.target.value)}
                 placeholder="Ej: https://ejemplo.com/logo.png"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                disabled={!canEdit}
               />
               <p className="text-xs text-gray-500 mt-1">Introduce una URL de imagen para el logo del contrato.</p>
             </div>
@@ -965,7 +1178,8 @@ const ContractsTab = () => {
           <div className="flex justify-end space-x-2">
             <button
               onClick={handleAddOrUpdateContract}
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-md"
+              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canEdit}
             >
               {editingContractId ? 'Guardar Cambios' : 'Añadir Contrato'}
             </button>
@@ -980,6 +1194,7 @@ const ContractsTab = () => {
                   setShowAddContractForm(false);
                 }}
                 className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors shadow-md"
+                disabled={!canEdit}
               >
                 Cancelar Edición
               </button>
@@ -1053,7 +1268,7 @@ const generateAllActivitiesFlat = (sudsTypes, categories, definedActivityNames) 
 
 // --- New Tab 3: Definición de Actividades por SUDS ---
 const SudsActivityDefinitionTab = () => {
-  const { db, userId, appId, showCustomModal, handleMoveSudsType, handleMoveActivityColumn } = useAppContext();
+  const { db, userId, appId, showCustomModal, handleMoveSudsType, handleMoveActivityColumn, userRole, ROLES } = useAppContext();
   const [sudsTypes, setSudsTypes] = useState([]);
   const [maintenanceActivities, setMaintenanceActivities] = useState([]);
   const [categories, setCategories] = useState(['Limpieza', 'Vegetación', 'Estructura', 'Hidráulica', 'Otros']);
@@ -1073,7 +1288,7 @@ const SudsActivityDefinitionTab = () => {
   const [currentActivityForDependencies, setCurrentActivityForDependencies] = useState(null); // { sudsId, activityName, category }
   const [selectedDependencies, setSelectedDependencies] = useState([]); // List of dependent activity IDs
 
-  const canEdit = true; // Everyone can edit definitions
+  const canEdit = userRole === ROLES.MASTER || userRole === ROLES.SUDS_SPECIALIST;
 
   const locationTypeOptions = [
     { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
@@ -1094,15 +1309,12 @@ const SudsActivityDefinitionTab = () => {
           // Ensure 'order' field exists for all SUDS types, assign if missing
           const sudsTypesWithOrder = fetchedSudsTypes.map((suds, index) => {
             if (suds.order === undefined) {
-              // This update should ideally be done once during data migration or creation
-              // For now, we'll just assign a default order if missing for display purposes.
-              // A batch update could be triggered here if permanent fix is needed for existing data.
               return { ...suds, order: index };
             }
             return suds;
           });
           setSudsTypes(sudsTypesWithOrder.sort((a, b) => (a.order || 0) - (b.order || 0)));
-          setLoading(false); // Set loading to false here as SUDS types are critical for the table structure
+          setLoading(false);
         }, (error) => {
           console.error("Error fetching SUDS types:", error);
           showCustomModal(`Error al cargar tipos de SUDS: ${error.message}`);
@@ -1133,10 +1345,8 @@ const SudsActivityDefinitionTab = () => {
         const unsubscribeDefinedActivities = onSnapshot(definedActivitiesRef, (docSnap) => {
           if (docSnap.exists() && docSnap.data()) {
             setDefinedActivityNames(docSnap.data());
-            console.log("Defined activity names updated from Firestore:", docSnap.data()); // Debug log
           } else {
             setDefinedActivityNames({});
-            console.log("Defined activity names document does not exist or is empty."); // Debug log
           }
         });
 
@@ -1158,20 +1368,20 @@ const SudsActivityDefinitionTab = () => {
   }, [db, appId, showCustomModal]);
 
   const handleToggleActivityApplies = async (sudsId, activityName, category) => {
+    if (!canEdit) return;
     const existingActivity = maintenanceActivities.find(
       (act) => act.sudsTypeId === sudsId && act.activityName === activityName && act.category === category
     );
 
-    const newAppliesStatus = !existingActivity?.applies; // Toggle the 'applies' status
+    const newAppliesStatus = !existingActivity?.applies;
 
     const activityData = {
       sudsTypeId: sudsId,
       activityName: activityName,
       category: category,
-      applies: newAppliesStatus, // Set the new applies status
+      applies: newAppliesStatus,
       lastUpdatedBy: userId,
       timestamp: new Date(),
-      // Ensure other fields are present if they exist in Firestore but not explicitly set here
       ...(existingActivity ? {
         status: existingActivity.status || '',
         comment: existingActivity.comment || '',
@@ -1180,7 +1390,7 @@ const SudsActivityDefinitionTab = () => {
         validationStatus: existingActivity.validationStatus || 'pendiente',
         validatorComment: existingActivity.validatorComment || '',
         validatedBy: existingActivity.validatedBy || '',
-        dependentActivities: existingActivity.dependentActivities || [], // Preserve dependencies
+        dependentActivities: existingActivity.dependentActivities || [],
       } : {}),
     };
 
@@ -1191,7 +1401,6 @@ const SudsActivityDefinitionTab = () => {
       } else {
         await addDoc(collection(db, `artifacts/${appId}/public/data/maintenanceActivities`), activityData);
       }
-      // showCustomModal("Estado de aplicación de actividad actualizado."); // Too many popups
     } catch (error) {
       console.error("Error updating activity applies status:", error);
       showCustomModal(`Error al guardar el estado de aplicación: ${error.message}`);
@@ -1199,12 +1408,13 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleSaveNewActivity = async (category) => {
+    if (!canEdit) return;
     if (!newActivityInput.trim()) {
       showCustomModal("Por favor, introduce un nombre para la nueva actividad.");
       return;
     }
 
-    const trimmedName = newActivityInput.trim().charAt(0).toUpperCase() + newActivityInput.trim().slice(1).toLowerCase(); // Sentence case
+    const trimmedName = newActivityInput.trim().charAt(0).toUpperCase() + newActivityInput.trim().slice(1).toLowerCase();
     const currentCategoryActivities = definedActivityNames[category] || [];
 
     if (currentCategoryActivities.includes(trimmedName)) {
@@ -1229,11 +1439,11 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleDeleteActivityColumn = async (category, activityName) => {
+    if (!canEdit) return;
     showCustomModal(
       `¿Estás seguro de que quieres eliminar la actividad "${activityName}" de la categoría "${category}"? Esto eliminará todos los datos asociados a esta actividad.`,
       async () => {
         try {
-          // 1. Remove activity name from definedActivityNames
           const currentCategoryActivities = definedActivityNames[category] || [];
           const updatedCategoryActivities = currentCategoryActivities.filter(name => name !== activityName);
           const updatedDefinedActivities = {
@@ -1242,7 +1452,6 @@ const SudsActivityDefinitionTab = () => {
           };
           await setDoc(doc(db, `artifacts/${appId}/public/data/appSettings`, 'definedActivityNames'), updatedDefinedActivities);
 
-          // 2. Delete associated maintenance activity documents
           const q = query(collection(db, `artifacts/${appId}/public/data/maintenanceActivities`),
             where("category", "==", category),
             where("activityName", "==", activityName)
@@ -1265,6 +1474,7 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleAddCategory = async () => {
+    if (!canEdit) return;
     if (!newCategoryName.trim()) {
       showCustomModal("Por favor, introduce un nombre para la nueva categoría.");
       return;
@@ -1281,6 +1491,7 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleMoveCategory = async (categoryToMove, direction) => {
+    if (!canEdit) return;
     const currentIndex = categories.indexOf(categoryToMove);
     const newCategories = [...categories];
 
@@ -1302,6 +1513,7 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleDeleteCategory = async (categoryToDelete) => {
+    if (!canEdit) return;
     const hasDefinedActivities = (definedActivityNames[categoryToDelete] && definedActivityNames[categoryToDelete].length > 0);
     const q = query(collection(db, `artifacts/${appId}/public/data/maintenanceActivities`), where("category", "==", categoryToDelete));
     const activityDocs = await getDocs(q);
@@ -1320,7 +1532,7 @@ const SudsActivityDefinitionTab = () => {
             await setDoc(doc(db, `artifacts/${appId}/public/data/appSettings`, 'definedActivityNames'), updatedDefinedActivities);
 
             const batch = writeBatch(db);
-            activityDocs.forEach(doc => {
+            activityDocs.docs.forEach(doc => {
               batch.delete(doc.ref);
             });
             await batch.commit();
@@ -1353,22 +1565,21 @@ const SudsActivityDefinitionTab = () => {
 
   // --- Activity Name Editing ---
   const handleEditActivityNameStart = (category, activityName) => {
-    console.log("Starting edit for:", { category, activityName }); // Debug log
+    if (!canEdit) return;
     setEditingActivityNameCategory(category);
-    setEditingActivityNameId(activityName); // Using name as ID for simplicity
+    setEditingActivityNameId(activityName);
     setEditingActivityNameValue(activityName);
   };
 
   const handleEditActivityNameSave = async () => {
-    console.log("Attempting to save edit. Current value:", editingActivityNameValue); // Debug log
+    if (!canEdit) return;
     if (!editingActivityNameValue.trim()) {
       showCustomModal("El nombre de la actividad no puede estar vacío.");
       return;
     }
-    const trimmedNewName = editingActivityNameValue.trim().charAt(0).toUpperCase() + editingActivityNameValue.trim().slice(1).toLowerCase(); // Sentence case
+    const trimmedNewName = editingActivityNameValue.trim().charAt(0).toUpperCase() + editingActivityNameValue.trim().slice(1).toLowerCase();
 
-    if (trimmedNewName === editingActivityNameId) { // No change
-      console.log("Activity name not changed, cancelling edit."); // Debug log
+    if (trimmedNewName === editingActivityNameId) {
       setEditingActivityNameId(null);
       return;
     }
@@ -1383,8 +1594,6 @@ const SudsActivityDefinitionTab = () => {
       `¿Estás seguro de que quieres renombrar "${editingActivityNameId}" a "${trimmedNewName}"? Esto actualizará todos los registros asociados.`,
       async () => {
         try {
-          // 1. Update definedActivityNames
-          console.log("Updating definedActivityNames in Firestore..."); // Debug log
           const updatedCategoryActivities = currentCategoryActivities.map(name =>
             name === editingActivityNameId ? trimmedNewName : name
           );
@@ -1393,10 +1602,7 @@ const SudsActivityDefinitionTab = () => {
             [editingActivityNameCategory]: updatedCategoryActivities
           };
           await setDoc(doc(db, `artifacts/${appId}/public/data/appSettings`, 'definedActivityNames'), updatedDefinedActivities);
-          console.log("definedActivityNames updated successfully."); // Debug log
 
-          // 2. Update all associated maintenanceActivities documents
-          console.log("Updating associated maintenanceActivities in Firestore..."); // Debug log
           const q = query(collection(db, `artifacts/${appId}/public/data/maintenanceActivities`),
             where("category", "==", editingActivityNameCategory),
             where("activityName", "==", editingActivityNameId)
@@ -1407,26 +1613,25 @@ const SudsActivityDefinitionTab = () => {
             batch.update(docSnap.ref, { activityName: trimmedNewName });
           });
           await batch.commit();
-          console.log("Associated maintenanceActivities updated successfully."); // Debug log
 
           showCustomModal("Nombre de actividad actualizado con éxito.");
-          setEditingActivityNameId(null); // Reset editing state after successful save
+          setEditingActivityNameId(null);
         } catch (error) {
-          console.error("Error during activity rename operation:", error); // Debug log
+          console.error("Error during activity rename operation:", error);
           showCustomModal(`Error al renombrar la actividad: ${error.message}`);
-          setEditingActivityNameId(null); // Also reset on error to avoid stuck state
+          setEditingActivityNameId(null);
         }
       },
       true,
       () => {
-        console.log("Activity rename cancelled by user."); // Debug log
-        setEditingActivityNameId(null); // Reset editing state on cancel
+        setEditingActivityNameId(null);
       }
     );
   };
 
   // --- Activity Dependencies ---
   const handleOpenDependenciesModal = (sudsId, activityName, category) => {
+    if (!canEdit) return;
     const activity = maintenanceActivities.find(
       (act) => act.sudsTypeId === sudsId && act.activityName === activityName && act.category === category
     );
@@ -1436,6 +1641,7 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleToggleDependency = (dependentActivityId) => {
+    if (!canEdit) return;
     setSelectedDependencies(prev =>
       prev.includes(dependentActivityId)
         ? prev.filter(id => id !== dependentActivityId)
@@ -1444,6 +1650,7 @@ const SudsActivityDefinitionTab = () => {
   };
 
   const handleSaveDependencies = async () => {
+    if (!canEdit) return;
     if (!currentActivityForDependencies) return;
 
     const { sudsId, activityName, category, id } = currentActivityForDependencies;
@@ -1451,7 +1658,6 @@ const SudsActivityDefinitionTab = () => {
     try {
       const batch = writeBatch(db);
 
-      // Update the primary activity's dependencies
       const primaryActivityRef = id ? doc(db, `artifacts/${appId}/public/data/maintenanceActivities`, id) : null;
       if (primaryActivityRef) {
         batch.update(primaryActivityRef, {
@@ -1460,12 +1666,11 @@ const SudsActivityDefinitionTab = () => {
           timestamp: new Date(),
         });
       } else {
-        // If primary activity doesn't exist, create it with dependencies
         const newPrimaryActivityData = {
           sudsTypeId: sudsId,
           activityName: activityName,
           category: category,
-          applies: true, // A primary activity with dependencies should always apply
+          applies: true,
           dependentActivities: selectedDependencies,
           lastUpdatedBy: userId,
           timestamp: new Date(),
@@ -1475,15 +1680,13 @@ const SudsActivityDefinitionTab = () => {
         batch.set(doc(collection(db, `artifacts/${appId}/public/data/maintenanceActivities`)), newPrimaryActivityData);
       }
 
-      // Ensure all selected dependent activities have applies: true
       for (const depId of selectedDependencies) {
         const dependentActivity = maintenanceActivities.find(act => act.id === depId);
         if (dependentActivity && !dependentActivity.applies) {
           const depRef = doc(db, `artifacts/${appId}/public/data/maintenanceActivities`, depId);
           batch.update(depRef, { applies: true, lastUpdatedBy: userId, timestamp: new Date() });
         } else if (!dependentActivity) {
-          // If dependent activity doesn't exist, create it with applies: true
-          const parts = depId.split('-'); // Format: sudsId-category-activityName
+          const parts = depId.split('-');
           if (parts.length === 3) {
             const [depSudsId, depCategory, depActivityName] = parts;
             const newDependentActivityData = {
@@ -1491,7 +1694,7 @@ const SudsActivityDefinitionTab = () => {
               activityName: depActivityName,
               category: depCategory,
               applies: true,
-              dependentActivities: [], // Dependent activities don't have further dependencies here
+              dependentActivities: [],
               lastUpdatedBy: userId,
               timestamp: new Date(),
               status: '', comment: '', involvedContracts: [], frequency: '',
@@ -1515,10 +1718,7 @@ const SudsActivityDefinitionTab = () => {
 
 
   const activityNamesByCategory = categories.reduce((acc, cat) => {
-    // DO NOT sort here. The order should be preserved from definedActivityNames[cat]
     let names = definedActivityNames[cat] || [];
-    // Ensure all activities that exist in maintenanceActivities for this category are also in the list
-    // This handles cases where an activity might be added via `handleToggleActivityApplies` but not yet explicitly defined in `definedActivityNames`
     maintenanceActivities
       .filter(act => act.category === cat && !names.includes(act.activityName))
       .forEach(act => names.push(act.activityName));
@@ -1528,7 +1728,6 @@ const SudsActivityDefinitionTab = () => {
   }, {});
 
 
-  // Generate a flat list of all activities for the dependency modal
   const allActivitiesFlat = generateAllActivitiesFlat(sudsTypes, categories, definedActivityNames);
 
 
@@ -1548,10 +1747,12 @@ const SudsActivityDefinitionTab = () => {
             onChange={(e) => setNewCategoryName(e.target.value)}
             placeholder="Nueva categoría de mantenimiento"
             className="flex-grow p-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+            disabled={!canEdit}
           />
           <button
             onClick={handleAddCategory}
-            className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-md w-full md:w-auto"
+            className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-md w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!canEdit}
           >
             Añadir Categoría
           </button>
@@ -1567,7 +1768,7 @@ const SudsActivityDefinitionTab = () => {
                 <div className="ml-4 flex space-x-2">
                   <button
                     onClick={() => handleMoveCategory(category, 'up')}
-                    disabled={index === 0}
+                    disabled={index === 0 || !canEdit}
                     className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Mover categoría arriba"
                   >
@@ -1575,7 +1776,7 @@ const SudsActivityDefinitionTab = () => {
                   </button>
                   <button
                     onClick={() => handleMoveCategory(category, 'down')}
-                    disabled={index === categories.length - 1}
+                    disabled={index === categories.length - 1 || !canEdit}
                     className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Mover categoría abajo"
                   >
@@ -1583,8 +1784,9 @@ const SudsActivityDefinitionTab = () => {
                   </button>
                   <button
                     onClick={() => handleDeleteCategory(category)}
-                    className="p-1 text-red-500 hover:text-red-700 transition-colors"
+                    className="p-1 text-red-500 hover:text-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title={`Eliminar categoría "${category}"`}
+                    disabled={!canEdit}
                   >
                     🗑️
                   </button>
@@ -1594,8 +1796,9 @@ const SudsActivityDefinitionTab = () => {
             {canEdit && (
               <button
                 onClick={() => setShowAddActivityInput(prev => ({ ...prev, [category]: !prev[category] }))}
-                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm shadow-sm"
+                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 title={showAddActivityInput[category] ? "Ocultar entrada de actividad" : "Añadir nueva actividad"}
+                disabled={!canEdit}
               >
                 {showAddActivityInput[category] ? '−' : '+'} Añadir Actividad
               </button>
@@ -1610,10 +1813,12 @@ const SudsActivityDefinitionTab = () => {
                 onChange={(e) => setNewActivityInput(e.target.value)}
                 placeholder="Nombre de la nueva actividad"
                 className="flex-grow p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                disabled={!canEdit}
               />
               <button
                 onClick={() => handleSaveNewActivity(category)}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md w-full md:w-auto"
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md w-full md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canEdit}
               >
                 Guardar Actividad
               </button>
@@ -1632,7 +1837,7 @@ const SudsActivityDefinitionTab = () => {
                           {/* Left Arrow */}
                           <button
                             onClick={() => handleMoveActivityColumn(category, activityName, 'left', definedActivityNames)}
-                            disabled={activityNamesByCategory[category].indexOf(activityName) === 0}
+                            disabled={activityNamesByCategory[category].indexOf(activityName) === 0 || !canEdit}
                             className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Mover actividad a la izquierda"
                           >
@@ -1642,18 +1847,19 @@ const SudsActivityDefinitionTab = () => {
                             <input
                               type="text"
                               value={editingActivityNameValue}
-                              onChange={(e) => setEditingActivityNameValue(e.target.value)} // Corrected here
+                              onChange={(e) => setEditingActivityNameValue(e.target.value)}
                               onBlur={handleEditActivityNameSave}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   handleEditActivityNameSave();
                                 }
                               }}
-                              className="w-24 p-1 border-2 border-blue-500 rounded-md text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-600" /* Added prominent border */
+                              className="w-24 p-1 border-2 border-blue-500 rounded-md text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              disabled={!canEdit}
                             />
                           ) : (
                             <span
-                              className="cursor-pointer hover:text-blue-700"
+                              className={`cursor-pointer hover:text-blue-700 ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
                               onClick={() => handleEditActivityNameStart(category, activityName)}
                               title="Editar nombre de actividad"
                             >
@@ -1663,7 +1869,7 @@ const SudsActivityDefinitionTab = () => {
                           {/* Right Arrow */}
                           <button
                             onClick={() => handleMoveActivityColumn(category, activityName, 'right', definedActivityNames)}
-                            disabled={activityNamesByCategory[category].indexOf(activityName) === activityNamesByCategory[category].length - 1}
+                            disabled={activityNamesByCategory[category].indexOf(activityName) === activityNamesByCategory[category].length - 1 || !canEdit}
                             className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Mover actividad a la derecha"
                           >
@@ -1673,8 +1879,9 @@ const SudsActivityDefinitionTab = () => {
                         {canEdit && (
                           <button
                             onClick={() => handleDeleteActivityColumn(category, activityName)}
-                            className="mt-1 text-red-500 hover:text-red-700 transition-colors text-xs"
+                            className="mt-1 text-red-500 hover:text-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={`Eliminar actividad "${activityName}"`}
+                            disabled={!canEdit}
                           >
                             🗑️
                           </button>
@@ -1693,7 +1900,7 @@ const SudsActivityDefinitionTab = () => {
                         <div className="flex flex-col mr-2">
                           <button
                             onClick={() => handleMoveSudsType(suds.id, 'up', sudsTypes)}
-                            disabled={sudsIndex === 0}
+                            disabled={sudsIndex === 0 || !canEdit}
                             className="p-0.5 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Mover tipo de SUDS arriba"
                           >
@@ -1701,7 +1908,7 @@ const SudsActivityDefinitionTab = () => {
                           </button>
                           <button
                             onClick={() => handleMoveSudsType(suds.id, 'down', sudsTypes)}
-                            disabled={sudsIndex === sudsTypes.length - 1}
+                            disabled={sudsIndex === sudsTypes.length - 1 || !canEdit}
                             className="p-0.5 text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Mover tipo de SUDS abajo"
                           >
@@ -1749,13 +1956,15 @@ const SudsActivityDefinitionTab = () => {
                               type="checkbox"
                               checked={applies}
                               onChange={() => handleToggleActivityApplies(suds.id, activityName, category)}
-                              className="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
+                              className="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={!canEdit}
                             />
-                            {applies && ( // Show dependency button only if activity applies
+                            {applies && (
                               <button
                                 onClick={() => handleOpenDependenciesModal(suds.id, activityName, category)}
-                                className={`mt-1 text-sm ${dependencyButtonClass} hover:text-blue-800`}
+                                className={`mt-1 text-sm ${dependencyButtonClass} hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed`}
                                 title={dependencyTooltip}
+                                disabled={!canEdit}
                               >
                                 🔗
                               </button>
@@ -1769,7 +1978,6 @@ const SudsActivityDefinitionTab = () => {
               </tbody>
             </table>
           </div>
-          {/* Dependencies Modal */}
           {showDependenciesModal && currentActivityForDependencies && (
             <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full">
@@ -1782,7 +1990,7 @@ const SudsActivityDefinitionTab = () => {
                   {allActivitiesFlat
                     .filter(act =>
                       act.id !== `${currentActivityForDependencies.sudsId}-${currentActivityForDependencies.category}-${currentActivityForDependencies.activityName}` &&
-                      act.sudsId === currentActivityForDependencies.sudsId // Filter by same SUDS
+                      act.sudsId === currentActivityForDependencies.sudsId
                     )
                     .map(act => {
                       const isSelected = selectedDependencies.includes(act.id);
@@ -1793,7 +2001,8 @@ const SudsActivityDefinitionTab = () => {
                             id={`dep-${act.id}`}
                             checked={isSelected}
                             onChange={() => handleToggleDependency(act.id)}
-                            className="form-checkbox h-4 w-4 text-blue-600 rounded"
+                            className="form-checkbox h-4 w-4 text-blue-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!canEdit}
                           />
                           <label htmlFor={`dep-${act.id}`} className="ml-2 text-sm text-gray-800">
                             {act.sudsName} - {act.category} - {act.activityName}
@@ -1811,7 +2020,8 @@ const SudsActivityDefinitionTab = () => {
                   </button>
                   <button
                     onClick={handleSaveDependencies}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!canEdit}
                   >
                     Guardar Dependencias
                   </button>
@@ -1833,7 +2043,6 @@ const getDisplayActivities = (sudsId, allMaintenanceActivities, categories, defi
   const processedActivityIds = new Set();
   const displayedOrder = [];
 
-  // Determine all activities that are dependents of *other* activities within this SUDS
   const allDependentIds = new Set();
   sudsActivities.forEach(act => {
     if (act.dependentActivities) {
@@ -1841,10 +2050,8 @@ const getDisplayActivities = (sudsId, allMaintenanceActivities, categories, defi
     }
   });
 
-  // Identify top-level activities (those that are applicable and not dependents of others within this SUDS)
   let topLevelActivities = sudsActivities.filter(act => !allDependentIds.has(act.id));
 
-  // Sort top-level activities based on the order defined in `definedActivityNames`
   topLevelActivities.sort((a, b) => {
     const categoryAIndex = categories.indexOf(a.category);
     const categoryBIndex = categories.indexOf(b.category);
@@ -1862,19 +2069,17 @@ const getDisplayActivities = (sudsId, allMaintenanceActivities, categories, defi
     return activityIndexA - activityIndexB;
   });
 
-  // Function to recursively add activities and their dependents
   const addActivityAndDependents = (activity) => {
     if (processedActivityIds.has(activity.id)) {
       return;
     }
 
-    displayedOrder.push({ ...activity, isDependent: activity.isDependent || false }); // Preserve isDependent flag
+    displayedOrder.push({ ...activity, isDependent: activity.isDependent || false });
     processedActivityIds.add(activity.id);
 
-    // Sort dependent activities by their defined order
     const sortedDependents = (activity.dependentActivities || [])
       .map(depId => activityMap.get(depId))
-      .filter(Boolean) // Filter out dependents that are not applicable or don't exist
+      .filter(Boolean)
       .sort((a, b) => {
         const categoryAIndex = categories.indexOf(a.category);
         const categoryBIndex = categories.indexOf(b.category);
@@ -1893,7 +2098,6 @@ const getDisplayActivities = (sudsId, allMaintenanceActivities, categories, defi
       });
 
     sortedDependents.forEach(depAct => {
-      // Mark as dependent for display purposes
       addActivityAndDependents({ ...depAct, isDependent: true });
     });
   };
@@ -1906,18 +2110,16 @@ const getDisplayActivities = (sudsId, allMaintenanceActivities, categories, defi
 
 // --- New Tab 4: Detalle de Actividades por SUDS ---
 const SudsActivityDetailsTab = () => {
-  const { db, userId, appId, showCustomModal } = useAppContext();
+  const { db, userId, appId, showCustomModal, userRole, ROLES } = useAppContext();
   const [sudsTypes, setSudsTypes] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [maintenanceActivities, setMaintenanceActivities] = useState([]);
   const [categories, setCategories] = useState([]);
   const [definedActivityNames, setDefinedActivityNames] = useState({});
   const [loading, setLoading] = useState(true);
-  const [filterLocationTypes, setFilterLocationTypes] = useState([]); // New state for filtering
+  const [filterLocationTypes, setFilterLocationTypes] = useState([]);
 
-  const canEditDetails = true;
-  // Renamed from 'Contrato específico de SUDS' to 'Actividad específica'
-  const SUDS_DEDICATED_CONTRACT_NAME = 'Actividad específica';
+  const canEditDetails = userRole === ROLES.MASTER || userRole === ROLES.SUDS_SPECIALIST;
 
   const locationTypeOptions = [
     { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
@@ -1979,7 +2181,6 @@ const SudsActivityDetailsTab = () => {
 
         return () => {
           unsubscribeSuds();
-          // unsubscribeContracts(); // Contracts are fetched once, no need for unsubscribe
           unsubscribeActivities();
           unsubscribeCategories();
           unsubscribeDefinedActivities();
@@ -1996,6 +2197,7 @@ const SudsActivityDetailsTab = () => {
   }, [db, appId, showCustomModal]);
 
   const handleUpdateActivityDetail = async (activityId, field, value) => {
+    if (!canEditDetails) return;
     try {
       const activityRef = doc(db, `artifacts/${appId}/public/data/maintenanceActivities`, activityId);
       const activitySnap = await getDoc(activityRef);
@@ -2004,16 +2206,13 @@ const SudsActivityDetailsTab = () => {
         showCustomModal("Error: Actividad no encontrada.");
         return;
       }
-      // No longer automatically manage 'Actividad específica' based on status
-      // involvedContracts will now only be updated if 'field' is explicitly 'involvedContracts'
 
       await updateDoc(activityRef, {
         [field]: value,
         lastUpdatedBy: userId,
         timestamp: new Date(),
-        validationStatus: 'pendiente', // Reset validation status on any change
+        validationStatus: 'pendiente',
       });
-      // showCustomModal("Detalle de actividad actualizado con éxito."); // Too many popups
     } catch (error) {
       console.error("Error updating activity detail:", error);
       showCustomModal(`Error al guardar el detalle de la actividad: ${error.message}`);
@@ -2030,16 +2229,13 @@ const SudsActivityDetailsTab = () => {
     return <div className="text-center text-gray-600">Cargando detalles de actividades...</div>;
   }
 
-  // Generate allActivitiesFlat for dependency resolution
   const allActivitiesFlat = generateAllActivitiesFlat(sudsTypes, categories, definedActivityNames);
 
-  // Filter SUDS types by selected location filters first
   const filteredSudsTypesByLocation = sudsTypes.filter(suds => {
-    if (filterLocationTypes.length === 0) return true; // No filters selected, show all
+    if (filterLocationTypes.length === 0) return true;
     return filterLocationTypes.some(filterType => suds.locationTypes?.includes(filterType));
   });
 
-  // Then, filter out SUDS types that have no applicable activities after location filtering
   const sudsTypesToDisplay = filteredSudsTypesByLocation.filter(suds =>
     maintenanceActivities.some(act => act.sudsTypeId === suds.id && act.applies)
   );
@@ -2156,6 +2352,7 @@ const SudsActivityDetailsTab = () => {
                                   value={activity.status || ''}
                                   onChange={(e) => handleUpdateActivityDetail(activity.id, 'status', e.target.value)}
                                   className={`w-full p-1 border rounded-md text-sm`}
+                                  disabled={!canEditDetails}
                                 >
                                   <option value="">Seleccionar estado</option>
                                   <option value="verde">Incluido en contrato</option>
@@ -2190,6 +2387,7 @@ const SudsActivityDetailsTab = () => {
                                           : `text-gray-700 hover:bg-gray-400 border border-gray-300`
                                         }`}
                                       title={contract.name}
+                                      disabled={!canEditDetails}
                                     >
                                       {contract.logoUrl ? (
                                         <img
@@ -2216,6 +2414,7 @@ const SudsActivityDetailsTab = () => {
                                   onChange={(e) => handleUpdateActivityDetail(activity.id, 'frequency', e.target.value)}
                                   placeholder="Ej: anual"
                                   className="w-full p-1 border rounded-md text-sm"
+                                  disabled={!canEditDetails}
                                 />
                               ) : (
                                 <span>{activity.frequency || 'N/A'}</span>
@@ -2235,6 +2434,7 @@ const SudsActivityDetailsTab = () => {
                                   placeholder="Comentario (ej: revisar barrido)"
                                   rows="2"
                                   className="w-full p-1 border rounded-md text-sm"
+                                  disabled={!canEditDetails}
                                 ></textarea>
                               ) : (
                                 <p>{activity.comment || 'Sin comentario'}</p>
@@ -2256,31 +2456,29 @@ const SudsActivityDetailsTab = () => {
 };
 
 
-// --- Tab 5: Resumen por contrato y validación (Old Tab 4) ---
+// --- Tab 5: Resumen por contrato y validación ---
 const SummaryTab = () => {
-  const { db, userId, userRole, appId, showCustomModal } = useAppContext();
+  const { db, userId, userRole, appId, showCustomModal, ROLES } = useAppContext();
   const [contracts, setContracts] = useState([]);
   const [sudsTypes, setSudsTypes] = useState([]);
   const [maintenanceActivities, setMaintenanceActivities] = useState([]);
-  const [categories, setCategories] = useState([]); // Added to fetch categories
-  const [definedActivityNames, setDefinedActivityNames] = useState({}); // Added to fetch definedActivityNames
+  const [categories, setCategories] = useState([]);
+  const [definedActivityNames, setDefinedActivityNames] = useState({});
   const [selectedContractId, setSelectedContractId] = useState('');
   const [loading, setLoading] = useState(true);
   const [contractAnalysis, setContractAnalysis] = useState('');
   const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
 
-  // State for validator comment in the table
   const [currentValidatorComment, setCurrentValidatorComment] = useState({});
 
+  const canValidate = userRole === ROLES.MASTER || userRole === ROLES.CONTRACT_MANAGER;
 
-  const canValidate = true;
-
-  const locationTypeOptions = [ // Re-define for this component's scope
+  const locationTypeOptions = [
     { id: 'acera', name: 'SUDS en acera', icon: '🚶‍♀️' },
     { id: 'zona_verde', name: 'SUDS en zona verde', icon: '🌳' },
     { id: 'viario', name: 'SUDS en viario', icon: '🚗' },
-    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' }, // Changed icon to pipe
+    { id: 'infraestructura', name: 'Elementos Auxiliares', icon: 'https://img.freepik.com/vector-premium/icono-tuberia-fontanero-vector-simple-servicio-agua-tubo-aguas-residuales_98396-55465.jpg' },
   ];
 
   useEffect(() => {
@@ -2291,13 +2489,12 @@ const SummaryTab = () => {
         const contractsSnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/contracts`));
         const contractsData = contractsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Removed the virtual "Contrato específico de SUDS" from here
         setContracts(contractsData);
 
         if (contractsData.length > 0) {
           setSelectedContractId(contractsData[0].id);
         } else {
-          setSelectedContractId(''); // No contract selected if none exist
+          setSelectedContractId('');
         }
 
         const sudsRef = collection(db, `artifacts/${appId}/public/data/sudsTypes`);
@@ -2320,7 +2517,6 @@ const SummaryTab = () => {
         const unsubscribeActivities = onSnapshot(activitiesRef, (snapshot) => {
           const activitiesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setMaintenanceActivities(activitiesData);
-          // Initialize currentValidatorComment state
           const initialComments = {};
           activitiesData.forEach(activity => {
             initialComments[activity.id] = activity.validatorComment || '';
@@ -2333,7 +2529,6 @@ const SummaryTab = () => {
           setLoading(false);
         });
 
-        // Listen for categories
         const categoriesRef = doc(db, `artifacts/${appId}/public/data/appSettings`, 'maintenanceCategories');
         const unsubscribeCategories = onSnapshot(categoriesRef, (docSnap) => {
           if (docSnap.exists() && docSnap.data().categories) {
@@ -2341,7 +2536,6 @@ const SummaryTab = () => {
           }
         });
 
-        // Listen for defined activity names
         const definedActivitiesRef = doc(db, `artifacts/${appId}/public/data/appSettings`, 'definedActivityNames');
         const unsubscribeDefinedActivities = onSnapshot(definedActivitiesRef, (docSnap) => {
           if (docSnap.exists() && docSnap.data()) {
@@ -2370,7 +2564,7 @@ const SummaryTab = () => {
   }, [db, appId, showCustomModal]);
 
   const handleValidation = async (activityId, status) => {
-    // Use the comment from the local state
+    if (!canValidate) return;
     const commentToSave = currentValidatorComment[activityId] || '';
     try {
       await updateDoc(doc(db, `artifacts/${appId}/public/data/maintenanceActivities`, activityId), {
@@ -2387,12 +2581,13 @@ const SummaryTab = () => {
   };
 
   const handleGenerateContractAnalysis = async () => {
+    if (!canValidate) return;
     if (!selectedContract) {
       showCustomModal("Por favor, selecciona un contrato para generar el análisis.");
       return;
     }
     setGeneratingAnalysis(true);
-    setContractAnalysis(''); // Clear previous analysis
+    setContractAnalysis('');
 
     try {
       const contractDetails = `Contrato: ${selectedContract.name}, Responsable: ${selectedContract.responsible}, Resumen: ${selectedContract.summary}.`;
@@ -2439,18 +2634,15 @@ const SummaryTab = () => {
 
 
   const selectedContract = contracts.find(c => c.id === selectedContractId);
-  // Filter activities to only show those marked as 'applies: true' AND involved in the selected contract
   const filteredActivities = maintenanceActivities.filter(activity =>
     activity.applies && selectedContract && activity.involvedContracts && activity.involvedContracts.includes(selectedContract.name)
   );
 
-  // Group activities by SUDS type, respecting the order of sudsTypes
   const activitiesBySudsType = sudsTypes.reduce((acc, suds) => {
     acc[suds.id] = filteredActivities.filter(act => act.sudsTypeId === suds.id);
     return acc;
   }, {});
 
-  // Generate allActivitiesFlat for dependency resolution
   const allActivitiesFlat = generateAllActivitiesFlat(sudsTypes, categories, definedActivityNames);
 
   if (loading) {
@@ -2490,7 +2682,7 @@ const SummaryTab = () => {
 
           <button
             onClick={handleGenerateContractAnalysis}
-            disabled={generatingAnalysis}
+            disabled={generatingAnalysis || !canValidate}
             className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors shadow-md text-sm mb-6 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {generatingAnalysis ? 'Generando Análisis...' : '✨ Analizar Contrato'}
@@ -2500,15 +2692,14 @@ const SummaryTab = () => {
             <p className="text-gray-600">No hay actividades propuestas para este contrato.</p>
           ) : (
             <div className="space-y-6">
-              {sudsTypes.map(suds => { // Iterate through sorted sudsTypes
+              {sudsTypes.map(suds => {
                 const sudsActivities = activitiesBySudsType[suds.id];
                 if (!sudsActivities || sudsActivities.length === 0) return null;
 
-                // Use the new getDisplayActivities for consistent ordering
                 const displayActivitiesForSuds = getDisplayActivities(suds.id, maintenanceActivities, categories, definedActivityNames)
-                  .filter(act => act.involvedContracts && act.involvedContracts.includes(selectedContract.name)); // Filter by selected contract
+                  .filter(act => act.involvedContracts && act.involvedContracts.includes(selectedContract.name));
 
-                if (displayActivitiesForSuds.length === 0) return null; // Don't render SUDS if no activities for selected contract
+                if (displayActivitiesForSuds.length === 0) return null;
 
                 return (
                   <div key={suds.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
@@ -2544,7 +2735,7 @@ const SummaryTab = () => {
                         <thead className="bg-gray-100">
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[150px]">Actividad</th> {/* Adjusted width */}
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[150px]">Actividad</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado Propuesto</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comentario Propuesto</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Frecuencia</th>
@@ -2572,7 +2763,7 @@ const SummaryTab = () => {
                             return (
                               <tr key={activity.id}>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{activity.category}</td>
-                                <td className="px-4 py-3 text-sm text-gray-800 whitespace-normal break-words"> {/* Adjusted for multi-line */}
+                                <td className="px-4 py-3 text-sm text-gray-800 whitespace-normal break-words">
                                   {activity.activityName}
                                 </td>
                                 <td className={`px-4 py-3 whitespace-nowrap text-sm ${statusColorClass}`}>
@@ -2602,31 +2793,34 @@ const SummaryTab = () => {
                                         placeholder="Comentario del validador"
                                         rows="2"
                                         className="w-full p-1 border rounded-md text-sm"
-                                        value={currentValidatorComment[activity.id] || ''} // Use local state for immediate feedback
+                                        value={currentValidatorComment[activity.id] || ''}
                                         onChange={(e) => {
                                           setCurrentValidatorComment(prev => ({
                                             ...prev,
                                             [activity.id]: e.target.value
                                           }));
                                         }}
-                                        onBlur={() => handleValidation(activity.id, activity.validationStatus || 'pendiente')} // Save on blur
+                                        disabled={!canValidate}
                                       ></textarea>
                                       <div className="flex space-x-2">
                                         <button
                                           onClick={() => handleValidation(activity.id, 'validado')}
-                                          className="flex-1 px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-xs"
+                                          className="flex-1 px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                          disabled={!canValidate}
                                         >
                                           Aceptar
                                         </button>
                                         <button
                                           onClick={() => handleValidation(activity.id, 'rechazado')}
-                                          className="flex-1 px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-xs"
+                                          className="flex-1 px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                          disabled={!canValidate}
                                         >
                                           Rechazar
                                         </button>
                                         <button
                                           onClick={() => handleValidation(activity.id, 'pendiente')}
-                                          className="flex-1 px-3 py-1 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors text-xs"
+                                          className="flex-1 px-3 py-1 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                          disabled={!canValidate}
                                         >
                                           Reiniciar
                                         </button>
@@ -2650,7 +2844,6 @@ const SummaryTab = () => {
         <p className="text-gray-600">Por favor, selecciona un contrato para ver el resumen.</p>
       )}
 
-      {/* Contract Analysis Modal */}
       {showAnalysisModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
@@ -2674,17 +2867,17 @@ const SummaryTab = () => {
 };
 
 
-// --- New Tab 6: Resumen Visual (Old Tab 5) ---
+// --- New Tab 6: Resumen Visual ---
 const VisualSummaryTab = () => {
   const { db, appId, showCustomModal } = useAppContext();
   const [sudsTypes, setSudsTypes] = useState([]);
   const [maintenanceActivities, setMaintenanceActivities] = useState([]);
   const [categories, setCategories] = useState([]);
   const [definedActivityNames, setDefinedActivityNames] = useState({});
-  const [contracts, setContracts] = useState([]); // New state for contracts
+  const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all'); // New state for category filter
-  const [selectedVisualLocationFilters, setSelectedVisualLocationFilters] = useState([]); // New state for location filter in visual summary table
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const [selectedVisualLocationFilters, setSelectedVisualLocationFilters] = useState([]);
 
 
   const locationTypeOptions = [
@@ -2773,8 +2966,6 @@ const VisualSummaryTab = () => {
       'N/A': 0,
     };
 
-    // Initialize data for each location type for the new bar charts
-    // Each location type will contain an array of objects, where each object is a SUDS type
     const locationTypeSpecificChartsData = {};
     locationTypeOptions.forEach(option => {
         locationTypeSpecificChartsData[option.id] = [];
@@ -2784,11 +2975,9 @@ const VisualSummaryTab = () => {
     maintenanceActivities.forEach(activity => {
       if (!activity.applies) return;
 
-      // Find the SUDS type for this activity
       const sudsType = sudsTypes.find(s => s.id === activity.sudsTypeId);
       if (!sudsType) return;
 
-      // Update global proposed and validation counts
       if (activity.status === 'verde') proposedStatusCounts['Incluido en contrato']++;
       else if (activity.status === 'amarillo') proposedStatusCounts['Fácilmente integrable']++;
       else if (activity.status === 'rojo') proposedStatusCounts['Actividad específica']++;
@@ -2800,7 +2989,6 @@ const VisualSummaryTab = () => {
       else if (activity.validationStatus === 'pendiente') validationStatusCounts['pendiente']++;
       else validationStatusCounts['N/A']++;
 
-      // Update specific location type charts data
       if (sudsType.locationTypes && sudsType.locationTypes.length > 0) {
         sudsType.locationTypes.forEach(locTypeId => {
           if (locationTypeSpecificChartsData[locTypeId]) {
@@ -2819,7 +3007,6 @@ const VisualSummaryTab = () => {
               locationTypeSpecificChartsData[locTypeId].push(sudsEntry);
             }
 
-            // Aggregate counts for the current SUDS type within this location type
             if (activity.status === 'verde') sudsEntry.proposed_verde++;
             else if (activity.status === 'amarillo') sudsEntry.proposed_amarillo++;
             else if (activity.status === 'rojo') sudsEntry.proposed_rojo++;
@@ -2849,17 +3036,15 @@ const VisualSummaryTab = () => {
 
   const { proposedPieData, validationPieData, locationTypeSpecificChartsData } = processChartData();
 
-  const COLORS_PROPOSED = ['#4CAF50', '#FFC107', '#F44336', '#9E9E9E', '#BDBDBD']; // Green, Yellow, Red, Grey, Light Grey
-  const COLORS_VALIDATION = ['#FFC107', '#4CAF50', '#F44336', '#BDBDBD']; // Yellow, Green, Red, Light Grey
+  const COLORS_PROPOSED = ['#4CAF50', '#FFC107', '#F44336', '#9E9E9E', '#BDBDBD'];
+  const COLORS_VALIDATION = ['#FFC107', '#4CAF50', '#F44336', '#BDBDBD'];
 
-  // Prepare data for the new table
   const allUniqueActivityNames = Array.from(new Set(
     Object.values(definedActivityNames).flat()
   )).sort();
 
   const filteredActivityNames = allUniqueActivityNames.filter(activityName => {
     if (selectedCategoryFilter === 'all') return true;
-    // Check if this activityName belongs to the selected category
     return (definedActivityNames[selectedCategoryFilter] || []).includes(activityName);
   });
 
@@ -2872,7 +3057,6 @@ const VisualSummaryTab = () => {
     return <div className="text-center text-gray-600">Cargando resumen visual...</div>;
   }
 
-  // Filter SUDS types for the table based on selectedVisualLocationFilters
   const filteredSudsTypesForTable = sudsTypes.filter(suds => {
     if (selectedVisualLocationFilters.length === 0) return true;
     return selectedVisualLocationFilters.some(filterType => suds.locationTypes?.includes(filterType));
@@ -2883,7 +3067,7 @@ const VisualSummaryTab = () => {
     <div className="p-4 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Resumen Visual de Actividades</h2>
 
-      {maintenanceActivities.filter(act => act.applies).length === 0 ? ( // Check if any activities are marked as applies: true
+      {maintenanceActivities.filter(act => act.applies).length === 0 ? (
         <p className="text-gray-600">No hay datos de actividades de mantenimiento marcadas como necesarias para generar el resumen visual.</p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -2940,7 +3124,7 @@ const VisualSummaryTab = () => {
           {/* Individual Location Type Bar Charts */}
           {locationTypeOptions.map((locationType) => {
               const chartData = locationTypeSpecificChartsData[locationType.id];
-              if (!chartData || chartData.length === 0) return null; // Don't render if no data for this location type
+              if (!chartData || chartData.length === 0) return null;
 
               return (
                 <div key={locationType.id} className="lg:col-span-1 bg-gray-50 p-4 rounded-lg shadow-sm">
@@ -3038,7 +3222,7 @@ const VisualSummaryTab = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredSudsTypesForTable.map(suds => ( // Use filteredSudsTypesForTable here
+                {filteredSudsTypesForTable.map(suds => (
                   <tr key={suds.id}>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10">
                       {suds.name}
@@ -3059,12 +3243,11 @@ const VisualSummaryTab = () => {
                       )}
                     </td>
                     {filteredActivityNames.map(activityName => {
-                      // Find the activity for this SUDS and activityName (across all categories)
                       const activity = maintenanceActivities.find(
                         act => act.sudsTypeId === suds.id && act.activityName === activityName && act.applies
                       );
 
-                      let cellBgClass = 'bg-gray-50'; // Default if no applicable activity
+                      let cellBgClass = 'bg-gray-50';
                       let contractLogos = [];
 
                       if (activity) {
@@ -3079,7 +3262,6 @@ const VisualSummaryTab = () => {
                         }
 
                         if (activity.involvedContracts && activity.involvedContracts.length > 0) {
-                          // Sort contract logos alphabetically by name
                           contractLogos = activity.involvedContracts
                             .map(contractName => ({
                               name: contractName,
@@ -3112,7 +3294,6 @@ const VisualSummaryTab = () => {
                           ) : activity && activity.status === 'no_aplica' ? (
                             <span className="text-xs text-gray-500">N/A</span>
                           ) : (
-                            // Render nothing or a placeholder if no activity or if applies: false
                             <span className="text-xs text-gray-400">-</span>
                           )}
                         </td>
@@ -3122,6 +3303,255 @@ const VisualSummaryTab = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- New Tab for Master: Gestión de usuarios ---
+const UserManagementTab = () => {
+  const { db, auth, appId, showCustomModal, ROLES } = useAppContext();
+  const [users, setUsers] = useState([]);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState(ROLES.SUDS_SPECIALIST); // Default for new user
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [showChangesModal, setShowChangesModal] = useState(false);
+  const [selectedUserChanges, setSelectedUserChanges] = useState(null);
+
+  const rolesForCreation = [ROLES.MASTER, ROLES.SUDS_SPECIALIST, ROLES.CONTRACT_MANAGER];
+
+  useEffect(() => {
+    if (!db || !appId) return;
+
+    const q = collection(db, `artifacts/${appId}/public/data/userProfiles`);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUsers(fetchedUsers);
+    }, (error) => {
+      console.error("Error fetching user profiles:", error);
+      showCustomModal(`Error al cargar perfiles de usuario: ${error.message}`);
+    });
+
+    return () => unsubscribe();
+  }, [db, appId, showCustomModal]);
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
+      showCustomModal("Por favor, rellena todos los campos para crear el usuario.");
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      // 1. Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, newEmail.trim(), newPassword.trim());
+      const newUserUid = userCredential.user.uid;
+
+      // 2. Save user profile in Firestore
+      await setDoc(doc(db, `artifacts/${appId}/public/data/userProfiles`, newUserUid), {
+        uid: newUserUid,
+        name: newName.trim(),
+        email: newEmail.trim(),
+        role: newRole,
+        createdAt: new Date(),
+        lastSentTimestamp: null, // Initialize last sent timestamp
+      });
+
+      showCustomModal(`Usuario "${newName.trim()}" (${newEmail.trim()}) con rol "${newRole}" creado con éxito.`, () => {
+        setNewName('');
+        setNewEmail('');
+        setNewPassword('');
+        setNewRole(ROLES.SUDS_SPECIALIST);
+      });
+
+    } catch (error) {
+      console.error("Error creating user:", error);
+      let errorMessage = `Error al crear usuario: ${error.message}`;
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'El correo electrónico ya está en uso por otra cuenta.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'La contraseña debe tener al menos 6 caracteres.';
+      }
+      showCustomModal(errorMessage);
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (uid, email) => {
+    showCustomModal(
+      `¿Estás seguro de que quieres eliminar al usuario "${email}"? Esta acción es irreversible.`,
+      async () => {
+        try {
+          // Note: Firebase Auth doesn't allow direct deletion of other users from client-side.
+          // This would typically require a Firebase Cloud Function or Admin SDK from a trusted server.
+          // For this exercise, we will only delete their profile document in Firestore.
+          // The actual Firebase Auth user account will remain.
+          await deleteDoc(doc(db, `artifacts/${appId}/public/data/userProfiles`, uid));
+          showCustomModal(`Perfil de usuario "${email}" eliminado con éxito. (La cuenta de autenticación de Firebase no se elimina desde aquí).`);
+        } catch (error) {
+          console.error("Error deleting user profile:", error);
+          showCustomModal(`Error al eliminar perfil de usuario: ${error.message}`);
+        }
+      },
+      true
+    );
+  };
+
+  const handleViewUserChanges = (user) => {
+    // This is a simplified representation of changes.
+    // A full "view changes in red" feature would require deep versioning and diffing logic.
+    setSelectedUserChanges(user);
+    setShowChangesModal(true);
+  };
+
+  return (
+    <div className="p-4 bg-white rounded-lg shadow-md">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Gestión de Usuarios</h2>
+
+      <div className="mb-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
+        <h3 className="text-xl font-semibold text-blue-800 mb-4">Crear Nuevo Usuario</h3>
+        <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="userName" className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+            <input
+              type="text"
+              id="userName"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Nombre del usuario"
+              className="w-full p-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="userEmail" className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+            <input
+              type="email"
+              id="userEmail"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="correo@ejemplo.com"
+              className="w-full p-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="userPassword" className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+            <input
+              type="password"
+              id="userPassword"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="********"
+              className="w-full p-2 border border-gray-300 rounded-md"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="userRoleSelect" className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
+            <select
+              id="userRoleSelect"
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md"
+            >
+              {rolesForCreation.map(role => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </div>
+          <div className="md:col-span-2 flex justify-end mt-4">
+            <button
+              type="submit"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={creatingUser}
+            >
+              {creatingUser ? 'Creando...' : 'Crear Usuario'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div>
+        <h3 className="text-xl font-semibold text-gray-800 mb-4">Usuarios Existentes</h3>
+        {users.length === 0 ? (
+          <p className="text-gray-600">No hay usuarios registrados.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Correo Electrónico</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rol</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Último Envío</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {users.map(user => (
+                  <tr key={user.id}>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{user.email}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{user.role}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {user.lastSentTimestamp ? new Date(user.lastSentTimestamp.seconds * 1000).toLocaleString() : 'Nunca'}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex space-x-2">
+                        {(user.role === ROLES.SUDS_SPECIALIST || user.role === ROLES.CONTRACT_MANAGER) && (
+                          <button
+                            onClick={() => handleViewUserChanges(user)}
+                            className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors text-xs"
+                          >
+                            Ver modificaciones
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                          className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-xs"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showChangesModal && selectedUserChanges && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full">
+            <h3 className="text-xl font-semibold mb-4">Modificaciones de {selectedUserChanges.name} ({selectedUserChanges.role})</h3>
+            <div className="prose max-w-none mb-4 max-h-96 overflow-y-auto">
+              <p className="text-sm text-gray-700">
+                Esta sección mostraría un historial detallado de las modificaciones realizadas por {selectedUserChanges.name}.
+                Actualmente, solo registra el último momento en que el usuario "envió" sus cambios.
+                <br /><br />
+                **Último Envío:** {selectedUserChanges.lastSentTimestamp ? new Date(selectedUserChanges.lastSentTimestamp.seconds * 1000).toLocaleString() : 'Nunca'}
+              </p>
+              <p className="text-red-600 text-sm mt-4">
+                La funcionalidad para visualizar los cambios "en rojo" en la web es una característica compleja que requiere un sistema de control de versiones y diffing de datos, lo cual está fuera del alcance de esta iteración.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowChangesModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
+              >
+                Volver a la visualización web
+              </button>
+            </div>
           </div>
         </div>
       )}
