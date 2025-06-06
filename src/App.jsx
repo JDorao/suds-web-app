@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch, orderBy } from 'firebase/firestore'; // Added orderBy
+import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch, orderBy } from 'firebase/firestore';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 
@@ -21,7 +21,7 @@ if (typeof __firebase_config !== 'undefined' && typeof __app_id !== 'undefined')
   currentAppId = __app_id;
 } else {
   // Assume standard web environment (e.g., Vite dev/build)
-  // These environment variables need to be set in a .env file (e.g., .env.local)
+  // These environment variables need to be set in a .env file (e.e., .env.local)
   firebaseConfig = {
     apiKey: import.meta.env.VITE_APP_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_APP_FIREBASE_AUTH_DOMAIN,
@@ -187,10 +187,11 @@ const App = () => {
         return userData.role || ROLES.READER;
       } else {
         // If user document doesn't exist, create it as a Reader by default
+        const safeEmail = email || `anonymous-${uid.substring(0, 8)}@app.com`; // Provide a fallback email, unique for anonymous
         await setDoc(userDocRef, {
           uid: uid,
-          email: email,
-          name: email.split('@')[0], // Basic name from email
+          email: safeEmail,
+          name: safeEmail.split('@')[0], // Use safeEmail here to avoid null.split error
           role: ROLES.READER,
           lastSentTimestamp: new Date(), // Initialize timestamp
         }, { merge: true });
@@ -222,8 +223,8 @@ const App = () => {
             const canvasUser = auth.currentUser;
             setCurrentUser(canvasUser);
             setUserId(canvasUser?.uid || crypto.randomUUID());
-            setUserEmail(canvasUser?.email || 'anonymous@canvas.com');
-            const fetchedRole = await fetchUserRole(canvasUser?.uid, canvasUser?.email || 'anonymous@canvas.com');
+            setUserEmail(canvasUser?.email || `anonymous-${canvasUser?.uid.substring(0, 8) || 'canvas'}@canvas.com`); // Use safe email for canvas anon
+            const fetchedRole = await fetchUserRole(canvasUser?.uid, canvasUser?.email);
             setUserRole(fetchedRole);
             setIsLoggedIn(!canvasUser.isAnonymous); // This will be false for anonymous token
             console.log("Signed in with custom token (Canvas environment).");
@@ -233,8 +234,8 @@ const App = () => {
             const anonUser = auth.currentUser;
             setCurrentUser(anonUser);
             setUserId(anonUser?.uid || crypto.randomUUID());
-            setUserEmail(anonUser?.email || 'anonymous@app.com');
-            const fetchedRole = await fetchUserRole(anonUser?.uid, anonUser?.email || 'anonymous@app.com');
+            setUserEmail(anonUser?.email || `anonymous-${anonUser?.uid.substring(0, 8) || 'app'}@app.com`); // Use safe email for app anon
+            const fetchedRole = await fetchUserRole(anonUser?.uid, anonUser?.email);
             setUserRole(fetchedRole);
             setIsLoggedIn(!anonUser.isAnonymous); // This will be false for anonymous user
             console.log("Signed in anonymously (web environment).");
@@ -303,7 +304,7 @@ const App = () => {
   const handleExportData = async () => {
     showCustomModal("Preparando datos para descargar...", () => {});
     try {
-      const collectionsToExport = ['sudsTypes', 'contracts', 'maintenanceActivities', 'userProfiles']; // Include userProfiles
+      const collectionsToExport = ['sudsTypes', 'contracts', 'maintenanceActivities', 'userProfiles']; // Include userProfiles for Master export
       const appSettingsDocs = ['maintenanceCategories', 'definedActivityNames'];
       const exportedData = {};
 
@@ -333,7 +334,7 @@ const App = () => {
       showCustomModal("Datos descargados con éxito.", () => {});
     } catch (error) {
       console.error("Error exporting data:", error);
-      showCustomModal(`Error al descargar datos: ${error.message}`, () => {});
+      showCustomModal(`Error al descargar datos: ${error.message}`);
     }
   };
 
@@ -471,51 +472,7 @@ const App = () => {
     }
   };
 
-  const handleSendUpdates = async () => {
-    if (!currentUser || userRole === ROLES.READER || userRole === ROLES.MASTER) return; // Only for Specialist and Contract Manager
-
-    try {
-      showCustomModal("Recolectando datos para guardar..."); // Show modal to user briefly
-
-      const collectionsToExport = ['sudsTypes', 'contracts', 'maintenanceActivities', 'userProfiles']; // All public data
-      const appSettingsDocs = ['maintenanceCategories', 'definedActivityNames'];
-      const exportedData = {};
-
-      for (const collectionName of collectionsToExport) {
-        const snapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/${collectionName}`));
-        exportedData[collectionName] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      }
-
-      exportedData.appSettings = {};
-      for (const docName of appSettingsDocs) {
-        const docSnap = await getDoc(doc(db, `artifacts/${appId}/public/data/appSettings`, docName));
-        if (docSnap.exists()) {
-          exportedData.appSettings[docName] = docSnap.data();
-        }
-      }
-
-      const jsonDataString = JSON.stringify(exportedData);
-
-      // Save the JSON string as a new snapshot document in user's subcollection
-      const snapshotRef = collection(db, `artifacts/${appId}/public/data/userProfiles/${userId}/submittedDataSnapshots`);
-      await addDoc(snapshotRef, {
-        timestamp: new Date(),
-        jsonData: jsonDataString,
-        submittedBy: userEmail // Store email for traceability
-      });
-
-      // Update the lastSentTimestamp in the user's main profile document
-      const userDocRef = doc(db, `artifacts/${appId}/public/data/userProfiles`, userId);
-      await updateDoc(userDocRef, {
-        lastSentTimestamp: new Date(),
-      });
-
-      showCustomModal("¡Actualizaciones enviadas y guardadas con éxito!", () => {});
-    } catch (error) {
-      console.error("Error sending or saving updates:", error);
-      showCustomModal(`Error al enviar o guardar actualizaciones: ${error.message}`, () => {});
-    }
-  };
+  // Removed handleSendUpdates function and related state/UI
 
 
   if (!isAuthReady) {
@@ -566,14 +523,7 @@ const App = () => {
               <div className="mt-2 flex space-x-2">
                 {isLoggedIn ? ( // Use isLoggedIn state here
                   <>
-                    {userRole === ROLES.SUDS_SPECIALIST || userRole === ROLES.CONTRACT_MANAGER ? (
-                      <button
-                        onClick={handleSendUpdates}
-                        className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors shadow-md text-sm"
-                      >
-                        Enviar Cambios
-                      </button>
-                    ) : null}
+                    {/* Removed "Enviar Cambios" button */}
                     <button
                       onClick={handleLogout}
                       className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors shadow-md text-sm"
@@ -1878,7 +1828,7 @@ const SudsTypesTab = () => {
                                   <input
                                     type="text"
                                     value={editingActivityNameValue}
-                                    onChange={(e) => setEditingActivityNameValue(e.target.value)}
+                                    onChange={(e) => setNewActivityNameValue(e.target.value)}
                                     onBlur={handleEditActivityNameSave}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
@@ -3343,6 +3293,7 @@ const SudsTypesTab = () => {
       };
 
       // --- New Tab for Master: Gestión de usuarios ---
+      // Removed UserChangesModal component
       const UserManagementTab = () => {
         const { db, auth, appId, showCustomModal, ROLES } = useAppContext();
         const [users, setUsers] = useState([]);
@@ -3351,8 +3302,7 @@ const SudsTypesTab = () => {
         const [newPassword, setNewPassword] = useState('');
         const [newRole, setNewRole] = useState(ROLES.SUDS_SPECIALIST); // Default for new user
         const [creatingUser, setCreatingUser] = useState(false);
-        const [showChangesModal, setShowChangesModal] = useState(false);
-        const [selectedUserChanges, setSelectedUserChanges] = useState(null); // Holds the user object for the changes modal
+        // Removed showChangesModal and selectedUserChanges states
 
         const rolesForCreation = [ROLES.MASTER, ROLES.SUDS_SPECIALIST, ROLES.CONTRACT_MANAGER];
 
@@ -3391,7 +3341,7 @@ const SudsTypesTab = () => {
               email: newEmail.trim(),
               role: newRole,
               createdAt: new Date(),
-              lastSentTimestamp: null, // Initialize last sent timestamp
+              lastSentTimestamp: null, // Initialize timestamp
             });
 
             showCustomModal(`Usuario "${newName.trim()}" (${newEmail.trim()}) con rol "${newRole}" creado con éxito.`, () => {
@@ -3435,10 +3385,7 @@ const SudsTypesTab = () => {
           );
         };
 
-        const handleViewUserChanges = (user) => {
-          setSelectedUserChanges(user);
-          setShowChangesModal(true);
-        };
+        // Removed handleViewUserChanges function
 
         return (
           <div className="p-4 bg-white rounded-lg shadow-md">
@@ -3535,14 +3482,7 @@ const SudsTypesTab = () => {
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex space-x-2">
-                              {(user.role === ROLES.SUDS_SPECIALIST || user.role === ROLES.CONTRACT_MANAGER) && (
-                                <button
-                                  onClick={() => handleViewUserChanges(user)}
-                                  className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors text-xs"
-                                >
-                                  Ver modificaciones
-                                </button>
-                              )}
+                              {/* Removed "Ver modificaciones" button */}
                               <button
                                 onClick={() => handleDeleteUser(user.id, user.email)}
                                 className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-xs"
@@ -3559,140 +3499,12 @@ const SudsTypesTab = () => {
               )}
             </div>
 
-            {/* Render UserChangesModal */}
-            {showChangesModal && selectedUserChanges && (
-                <UserChangesModal
-                    isOpen={showChangesModal}
-                    onClose={() => {
-                        setShowChangesModal(false);
-                        setSelectedUserChanges(null);
-                    }}
-                    user={selectedUserChanges}
-                    db={db}
-                    appId={appId}
-                    showCustomModal={showCustomModal}
-                />
-            )}
+            {/* Removed UserChangesModal render */}
           </div>
         );
       };
 
-      // --- New Component: UserChangesModal ---
-      const UserChangesModal = ({ isOpen, onClose, user, db, appId, showCustomModal }) => {
-        const [snapshots, setSnapshots] = useState([]);
-        const [loadingSnapshots, setLoadingSnapshots] = useState(true);
-
-        useEffect(() => {
-          if (!isOpen || !user?.id || !db) return;
-
-          const snapshotsCollectionRef = collection(db, `artifacts/${appId}/public/data/userProfiles/${user.id}/submittedDataSnapshots`);
-          const q = query(snapshotsCollectionRef, orderBy('timestamp', 'desc')); // Order by timestamp
-
-          const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedSnapshots = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              timestamp: doc.data().timestamp?.toDate() // Convert Firestore Timestamp to JS Date
-            }));
-            setSnapshots(fetchedSnapshots);
-            setLoadingSnapshots(false);
-          }, (error) => {
-            console.error("Error fetching user snapshots:", error);
-            showCustomModal(`Error al cargar las modificaciones del usuario: ${error.message}`);
-            setLoadingSnapshots(false);
-          });
-
-          return () => unsubscribe();
-        }, [isOpen, user?.id, db, appId, showCustomModal]);
-
-        const handleDownloadSnapshot = (jsonData, timestamp) => {
-          if (!jsonData) {
-            showCustomModal("Este JSON no está disponible.");
-            return;
-          }
-          try {
-            const blob = new Blob([jsonData], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `suds_data_snapshot_${user.name || user.email}_${timestamp.toISOString().slice(0, 19).replace(/[:.-]/g, '')}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          } catch (error) {
-            console.error("Error downloading snapshot:", error);
-            showCustomModal(`Error al descargar el JSON: ${error.message}`);
-          }
-        };
-
-        if (!isOpen) return null;
-
-        return (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-4xl w-full max-h-[90vh] flex flex-col">
-              <h3 className="text-xl font-semibold mb-4 border-b pb-2">Modificaciones de {user.name} ({user.role})</h3>
-              <p className="text-sm text-gray-700 mb-4">
-                Aquí puedes ver los puntos de guardado del historial de cambios de {user.name} ("Enviar Cambios").
-                Al hacer clic en "Descargar JSON", se descargará la instantánea completa de la base de datos en ese momento.
-              </p>
-
-              {loadingSnapshots ? (
-                <div className="text-center text-gray-600 my-8">Cargando historial de modificaciones...</div>
-              ) : snapshots.length === 0 ? (
-                <div className="text-center text-gray-600 my-8">
-                  Este usuario no ha enviado ninguna modificación aún.
-                </div>
-              ) : (
-                <div className="flex-grow overflow-y-auto mb-4 border rounded-md">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha y Hora de Envío</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado del JSON</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {snapshots.map(snapshot => (
-                        <tr key={snapshot.id}>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-800">
-                            {snapshot.timestamp ? snapshot.timestamp.toLocaleString() : 'Fecha no disponible'}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-700">
-                            {snapshot.jsonData ? 'Disponible' : 'No disponible'}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm">
-                            {snapshot.jsonData ? (
-                              <button
-                                onClick={() => handleDownloadSnapshot(snapshot.jsonData, snapshot.timestamp)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs shadow-md"
-                              >
-                                Descargar JSON
-                              </button>
-                            ) : (
-                              <span className="text-gray-500 italic">No disponible</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div className="flex justify-end mt-4">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors shadow-md"
-                >
-                  Volver a la visualización web
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      };
+      // Removed UserChangesModal component definition
 
       export default App;
 
